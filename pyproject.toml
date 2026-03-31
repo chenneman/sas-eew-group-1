@@ -3,4 +3,8 @@ name = "SAS_EEW_Group1"
 version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "greenlet>=3.3.2",
+    "pillow>=12.1.1",
+    "salabim==26.0.4.post0",
+]
