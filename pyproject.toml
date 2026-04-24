@@ -4,7 +4,11 @@ version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.13"
 dependencies = [
+    "beautifulsoup4>=4.14.3",
     "greenlet>=3.3.2",
+    "pandas>=3.0.2",
     "pillow>=12.1.1",
+    "requests>=2.33.1",
     "salabim==26.0.4.post0",
+    "tqdm>=4.67.3",
 ]
