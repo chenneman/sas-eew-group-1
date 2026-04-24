@@ -32,9 +32,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- Parameters ---
-PRODUCT_COUNT = 50       # Total items to pick for the simulation
+PRODUCT_COUNT = 100       # Total items to pick for the simulation
 MAX_ITEM_WEIGHT = 25.0   # Maximum weight per individual item (kg)
-MAX_DIMENSION = 120.0    # Maximum size for the LONGEST side of an item (cm)
+MAX_DIMENSION = 80.0    # Maximum size for the LONGEST side of an item (cm)
 RANDOM_SEED = 123        # For reproducible selection
 
 def main():
@@ -104,7 +104,7 @@ def main():
     
     logger.info(f"Successfully selected {PRODUCT_COUNT} items.")
     logger.info(f"Average weight: {result['Weight'].mean():.2f} kg")
-    logger.info(f"Total Volume: {result['Volume_cm3'].sum():.2f} cm3")
+    logger.info(f"Average Volume: {result['Volume_cm3'].mean():.2f} cm3")
     logger.info(f"Results saved to: {OUTPUT_FILE}")
 
 if __name__ == "__main__":
