@@ -33,8 +33,8 @@ logger = logging.getLogger(__name__)
 
 # --- Parameters ---
 PRODUCT_COUNT = 100       # Total items to pick for the simulation
-MAX_ITEM_WEIGHT = 25.0   # Maximum weight per individual item (kg)
-MAX_DIMENSION = 80.0    # Maximum size for the LONGEST side of an item (cm)
+MAX_ITEM_WEIGHT = 40   # Maximum weight per individual item (kg)
+MAX_DIMENSION = 40    # Maximum size for the LONGEST side of an item (cm)
 RANDOM_SEED = 123        # For reproducible selection
 
 def main():
