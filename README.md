@@ -9,11 +9,11 @@
 
 ### 2. Get the Code (Cloning)
 To get the project onto your computer with write access so you can save changes:
-1. **Get a Token:** Go to GitLab Settings > Access Tokens. Create a "Personal Access Token" with `read_repository` and `write_repository` checked. Copy it.
+1. **Get a Token:** Go to GitHub Settings > Developer Settings > Personal Access Tokens. Create a "Fine-grained personal access token" or "Tokens (classic)" with `repo` access. Copy it.
 2. Add the token to your favorite IDE, for **VS Code:** 
    - Press `Command + Shift + P` (Mac) or `Ctrl + Shift + P` (Windows) and type **Git: Clone**.
-   - When asked for the URL, use this (replace `YOUR_TOKEN` with the one you copied):
-     `https://oauth2:YOUR_TOKEN@gitlab.ewi.tudelft.nl/sshahrokni/sas-eew-group-1.git`
+   - When asked for the URL, use this:
+     `https://github.com/chenneman/sas-eew-group-1.git`
 
 ### 3. Set Up & Run
 Once the project is open:
@@ -32,5 +32,5 @@ Once the project is open:
 ### Branches
 - `main` - The main branch. This is never edited directly.
 
-Create a new branch for every new feature or bugfix, and open a merge request to merge it into `main`.
-Feature branches are best created from within Gitlab issues/tasks. 
+Create a new branch for every new feature or bugfix, and open a pull request to merge it into `main`.
+Feature branches are best created from within GitHub issues/tasks. 
