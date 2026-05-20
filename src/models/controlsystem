@@ -1,0 +1,78 @@
+#NEEDS TO BE FINISHED WHEN WAREHOUSE GRAPH DETAILS ARE KNOWN
+class TControlSystem(sim.Component):
+    def setup(
+        self,
+        warehouse,
+        order_queue,
+        available_agvs,
+        batch_size=3,
+        max_wait_time=5
+    ):
+        self.warehouse = warehouse
+        self.order_queue = order_queue
+        self.available_agvs = available_agvs
+        self.batch_size = batch_size
+        self.max_wait_time = max_wait_time
+        self.last_batch_time = 0
+
+    def process(self):
+        while True:
+            while len(self.order_queue) == 0:
+                self.passivate()
+            while len(self.order_queue) < self.batch_size:
+                if self.env.now() - self.last_batch_time >= self.max_wait_time:
+                    break
+                yield self.hold(1)
+
+            available_agvs = [
+                agv for agv in self.agvs
+                if agv.status == "IDLE"
+
+            ]
+
+            while len(available_agvs) == 0:
+                self.passivate()
+                available_agvs = [
+                    agv for agv in self.agvs
+                    if agv.status == "IDLE"
+                ]
+
+            batch_orders = list(self.order_queue)[:self.batch_size]
+
+            tasks = self.routing_algorithm(
+                orders=batch_orders,
+                available_agvs=available_agvs
+            )
+
+            for task in tasks:
+                agv = task.agv
+                agv.current_task = task
+                agv.route = task.route
+                agv.orders = task.orders
+                agv.status = "MOVING"
+                for order in task.orders:
+                    order.status = "ASSIGNED"
+                    order.leave(self.order_queue)
+                agv.activate()
+            self.last_batch_time = self.env.now()
+            yield self.hold(0)
+    
+    #def routing_algorithm(self, orders, available_agvs):
+        #copy gurobi code when finished
+    
+    def reconstruct_route(self, active_edges, depot, server):
+        route = [depot]
+        current = depot
+        used_edges = set()
+        while current != server:
+            next_node = None
+            for i, j in active_edges:
+                if i == current and (i, j) not in used_edges:
+                    next_node = j
+                    used_edges.add((i, j))
+                    break
+            if next_node is None:
+                break
+            route.append(next_node)
+            current = next_node
+        return route
