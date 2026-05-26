@@ -3,7 +3,6 @@ AGV simulation component and state models.
 """
 
 import salabim as sim
-import networkx as nx
 from enum import Enum
 
 
@@ -19,7 +18,7 @@ class AGVStatus(Enum):
 class AGV(sim.Component):
     """ Simulates an AGV navigating the warehouse grid."""
 
-    def setup(self, agv_id: int, routing_graph, server_queue: sim.Queue, charger_queue: sim.Queue) -> None:
+    def setup(self, agv_id: int, routing_graph, server_queue: sim.Queue, charger_queue: sim.Queue, available_agvs: sim.Queue) -> None:
         """
         :param agv_id: Unique identifier for the AGV.
         :type agv_id: int
@@ -29,17 +28,20 @@ class AGV(sim.Component):
         :type server_queue: sim.Queue
         :param charger_queue: The queue component for the charging station.
         :type charger_queue: sim.Queue
+        :param available_agvs: The queue managed by the ControlSystem for idle AGVs.
+        :type available_agvs: sim.Queue
         """
         self.agv_id = agv_id
         self.routing_graph = routing_graph
         self.graph = routing_graph._graph  # Underlying networkx graph for animation data
         self.server_queue = server_queue
         self.charger_queue = charger_queue
+        self.available_agvs = available_agvs
 
         # AGV Parameters
         self.max_battery = 621.6
         self.soc = self.max_battery
-        self.soc_threshold = 62.16
+        self.soc_threshold = 0.2 * self.max_battery # 20 percent battery threshold
         self.drive_speed = 3.5
         self.e_base = 0.0489
         self.e_alpha = 0.0001
@@ -48,6 +50,7 @@ class AGV(sim.Component):
         self.status = AGVStatus.IDLE
         self.current_task = None
         self.payload_mass = 0.0
+        self.items_loaded = 0
 
         # Positioning variables
         self.current_node = 1
@@ -57,10 +60,20 @@ class AGV(sim.Component):
             spec=(-15, -15, 15, 15),
             x=self.x,
             y=self.y,
-            fillcolor=self.color,
-            text=str(self.agv_id),
-            textcolor="white"
+            fillcolor=self.color
         )
+        
+        self.text_pic = sim.AnimateText(
+            text=self.get_anim_text,
+            x=self.x,
+            y=lambda t: self.y(t) - 25,
+            textcolor="white",
+            fontsize=12
+        )
+
+    def get_anim_text(self, t: float) -> str:
+        """Dynamically generates the text to display above the AGV."""
+        return f"AGV{self.agv_id}\nBat:{self.soc/self.max_battery*100:.0f}%\nItems:{self.items_loaded}"
 
     def x(self, t: float) -> float:
         """Calculates interpolated X coordinate for animation."""
@@ -101,15 +114,25 @@ class AGV(sim.Component):
 
         while True:
             self.status = AGVStatus.IDLE
+            self.enter(self.available_agvs)
+            
             while self.current_task is None:
                 self.passivate(mode="IDLE")
+            
+            if self in self.available_agvs:
+                self.leave(self.available_agvs)
 
-            self.status = AGVStatus.MOVING
-            self.drive_route(self.current_task.pickup_route)
+            for pickup in self.current_task.pickups:
+                self.status = AGVStatus.MOVING
+                self.drive_route(pickup.route)
 
-            self.status = AGVStatus.LOADING
-            self.hold(self.current_task.pick_time, mode="LOADING")
-            self.payload_mass = self.current_task.item_weight
+                self.status = AGVStatus.LOADING
+                self.hold(pickup.pick_time, mode="LOADING")
+                
+                # Dynamically accumulate mass and items
+                for item in pickup.items:
+                    self.payload_mass += item.weight
+                    self.items_loaded += 1
 
             self.status = AGVStatus.MOVING
             self.drive_route(self.current_task.dropoff_route)
@@ -120,6 +143,7 @@ class AGV(sim.Component):
 
             self.current_task = None
             self.payload_mass = 0.0
+            self.items_loaded = 0
 
             if self.soc < self.soc_threshold:
                 if charger_node is not None:
