@@ -1,5 +1,4 @@
 
-from src.models.agv import AGVStatus
 import salabim as sim
 import gurobipy as gp
 from gurobipy import GRB
