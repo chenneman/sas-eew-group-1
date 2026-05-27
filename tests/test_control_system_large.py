@@ -138,6 +138,31 @@ def run_test():
 
     print("======================================\n")
 
+    print("\n===== TTASK CHECK =====")
+
+    for task in tasks:
+
+        print(task)
+
+        print(f"Task ID: {task.id}")
+
+        print(f"AGV ID: {task.agv.agv_id}")
+
+        print(f"Orders: {[order.order_id for order in task.orders]}")
+
+        print(f"Items: {[item.name for item in task.items]}")
+
+        print(f"Route: {task.route}")
+
+        print(f"Creation time: {task.creation_time}")
+
+        assert len(task.orders) == len(task.items)
+
+        assert task.agv is not None
+
+        assert len(task.route) > 0
+
+    print("TTask works correctly.")
 
 if __name__ == "__main__":
     run_test()
