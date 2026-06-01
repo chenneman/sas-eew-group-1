@@ -8,14 +8,8 @@ Saves layout_test.png in the same directory as this script.
 """
 
 import math
-import pathlib
 import random
-import sys
-
-# ── Ensure src.* imports resolve when called from any working directory ────────
-_ROOT = pathlib.Path(__file__).resolve().parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
+from src.utils.paths import LOGS_DIR
 
 # Headless backend — works without a display and produces a clean PNG
 import matplotlib
@@ -209,6 +203,6 @@ fig.legend(
 plt.tight_layout(rect=[0, 0.05, 1, 1])
 
 # ── 7. Save ────────────────────────────────────────────────────────────────────
-out = _ROOT / "layout_test.png"
+out = LOGS_DIR / "layout_test.png"
 plt.savefig(out, dpi=150, bbox_inches="tight")
 print(f"\nFigure saved → {out}")
