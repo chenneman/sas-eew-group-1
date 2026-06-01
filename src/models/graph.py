@@ -16,6 +16,8 @@ class NodeType(Enum):
     PACKING = 2
     CHARGING = 3
     IDLE = 4
+    AISLE = 5
+    BORDER = 6
 
 
 class Node:
