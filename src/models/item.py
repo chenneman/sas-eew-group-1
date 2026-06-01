@@ -15,11 +15,12 @@ class Item:
     height: float
     volume: float
     url: str
-    shelf_location: tuple[int, int] | None = None
+    node_id: int | None = None
 
 def load_items(csv_path: str | Path = SELECTED_ITEMS_CSV) -> list[Item]:
     """
     Loads items from a CSV file and returns a list of Item objects.
+    NOTE: node_id is not loaded from the CSV file.
     
     Args:
         csv_path: Path to the CSV file. Defaults to SELECTED_ITEMS_CSV.
