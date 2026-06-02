@@ -1,6 +1,6 @@
 import salabim as sim
-from src.models.charger import Charger
-from src.models.agv import AGVStatus
+from components.charger import Charger
+from components.agv import AGVStatus
 
 from src.config import MAX_BATTERY
 

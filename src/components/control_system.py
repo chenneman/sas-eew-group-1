@@ -1,8 +1,8 @@
 import salabim as sim
 import gurobipy as gp
 from gurobipy import GRB
-from src.models.agv import AGVStatus
-from src.models.task import Task
+from components.agv import AGVStatus
+from entities.task import Task
 import networkx as nx
 
 from src.config import (BATCH_SIZE, MAX_WAIT_TIME, MAX_BATTERY, MAX_VOLUME, MAX_PAYLOAD, 

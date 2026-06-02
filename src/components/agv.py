@@ -106,7 +106,7 @@ class AGV(sim.Component):
 
     def process(self):
         """Main lifecycle loop of the AGV component."""
-        from src.models.graph import NodeType
+        from environment.graph import NodeType
 
         # Find charging node dynamically using underlying nx graph
         charger_node = next(

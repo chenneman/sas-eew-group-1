@@ -17,8 +17,8 @@ import matplotlib.lines as mlines
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 
-from src.models.graph import NodeType
-from src.models.warehouse import Warehouse
+from environment.graph import NodeType
+from environment.warehouse import Warehouse
 
 # ── Colour scheme ──────────────────────────────────────────────────────────────
 COLOR = {

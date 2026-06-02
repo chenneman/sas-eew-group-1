@@ -2,7 +2,7 @@
 
 from enum import Enum
 from dataclasses import dataclass
-from src.models.item import Item
+from entities.item import Item
 from src.config import SIM_START_HOUR
 
 class OrderStatus(Enum):

@@ -1,10 +1,10 @@
 import salabim as sim
 
-from src.models.graph import RoutingGraph, Node, NodeType
-from src.models.item import Item
-from src.models.order import Order
-from src.models.control_system import ControlSystem
-from src.models.agv import AGVStatus
+from environment.graph import RoutingGraph, Node, NodeType
+from entities.item import Item
+from entities.order import Order
+from components.control_system import ControlSystem
+from components.agv import AGVStatus
 
 
 class MockWarehouse:

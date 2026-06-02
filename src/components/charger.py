@@ -2,7 +2,7 @@
 
 import salabim as sim
 
-from src.models.agv import AGVStatus
+from components.agv import AGVStatus
 from src.config import CHARGE_RATE, MAX_BATTERY
 
 

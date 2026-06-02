@@ -1,5 +1,6 @@
 """Global configuration settings for the simulation"""
 
+#TODO change to yaml based config?
 
 L_WH       = 28             # Warehouse grid length in x (meters)
 W_WH       = 24             # Warehouse grid width in y (meters)

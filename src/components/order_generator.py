@@ -4,7 +4,7 @@ import random
 import salabim as sim
 
 from src.config import ORDERS_PER_HOUR, SIM_START_HOUR
-from src.models.order import Order
+from entities.order import Order
 
 # ── Helper functions ──────────────────────────────────────────────────────────
 

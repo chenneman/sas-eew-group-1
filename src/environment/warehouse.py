@@ -6,7 +6,7 @@ import numpy as np
 import salabim as sim
 
 from src.config import L_WH, W_WH, N_SERVERS, N_CHARGERS, N_ITEMS
-from src.models.graph import Node, NodeType, RoutingGraph
+from environment.graph import Node, NodeType, RoutingGraph
 
 
 class Warehouse:

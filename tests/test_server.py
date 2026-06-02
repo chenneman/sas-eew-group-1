@@ -1,10 +1,10 @@
 import salabim as sim
 
-from src.models.server import Server
-from src.models.item import Item
-from src.models.order import Order
-from src.models.task import Task
-from src.models.agv import AGVStatus
+from components.server import Server
+from entities.item import Item
+from entities.order import Order
+from entities.task import Task
+from components.agv import AGVStatus
 
 
 class MockAGV(sim.Component):
