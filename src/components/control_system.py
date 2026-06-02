@@ -13,6 +13,7 @@ from src.entities.task import Task
 from src.config import (BATCH_SIZE, MAX_WAIT_TIME, MAX_BATTERY, MAX_VOLUME, MAX_PAYLOAD,
                         BATTERY_THRESHOLD, E_BASE, ALPHA, INNOVATION_ENABLED)
 
+
 # TODO refactor spaghetti to more functions, add typehints
 class ControlSystem(sim.Component):
     """

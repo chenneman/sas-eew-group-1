@@ -23,16 +23,18 @@ class OrderGenerator(sim.Component):
     Order object, assigning it a unique sequential ID.
     """
 
-    def setup(self, items: list, order_queue: sim.Queue | list | None = None):
+    def setup(self, items: list, order_queue: list | None = None, control_system: sim.Component | None = None):
         """
         Setup the generator state.
         
         Args:
             items: Sequence of Item objects to sample from.
-            order_queue: Optional queue where generated orders are appended.
+            order_queue: Optional list where generated orders are appended.
+            control_system: Optional reference to the ControlSystem to wake up.
         """
         self.items = items
         self.order_queue = order_queue
+        self.control_system = control_system
         
         # Internal state tracking (Replaces the shared TOrder._next_id)
         self.orders_generated: int = 0
@@ -62,3 +64,7 @@ class OrderGenerator(sim.Component):
             self.orders.append(order)
             if self.order_queue is not None:
                 self.order_queue.append(order)
+                
+            # Wake up the control system if it's waiting for orders
+            if self.control_system and self.control_system.ispassive():
+                self.control_system.activate()
