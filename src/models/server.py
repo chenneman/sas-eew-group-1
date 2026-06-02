@@ -1,14 +1,12 @@
 """Packing-area server component for processing AGV deliveries."""
 
-from __future__ import annotations
-
 import salabim as sim
 
 from src.models.agv import AGVStatus
 from src.models.service_time_generator import ServiceTimeGenerator
 
 
-class TServer(sim.Component):
+class Server(sim.Component):
     """Processes AGVs waiting at the packing area."""
 
     def setup(
@@ -21,97 +19,83 @@ class TServer(sim.Component):
         location=None,
     ) -> None:
         self.server_id = server_id
-        self.MyQueue = queue
-        self.queue = self.MyQueue
-        self.my_queue = self.MyQueue
+        self.queue = queue
         self.service_time_generator = service_time_generator or ServiceTimeGenerator()
         self.processed_orders = processed_orders if processed_orders is not None else []
         self.poll_interval = poll_interval
         self.location = location
-        self.busy = False
+        
+        # State machine variables
+        self.state = "IDLE"
+        self.current_agv = None
+        self.current_task = None
+        self.remaining_op_time = 0.0
 
     def process(self):
+        # Pure Yieldless State Machine
         while True:
-            while len(self.MyQueue) == 0:
-                yield self.hold(self.poll_interval, mode="IDLE")
-
-            self.busy = True
-            my_agv = self.first_of_queue()
-            my_agv.leave(self.MyQueue)
-            task = getattr(my_agv, "current_task", None)
-            orders = self.get_orders_from_task(task)
-            all_items = self.gather_all_items(orders)
-
-            if not all_items:
-                all_items = self.gather_all_items_from_task(task)
-
-            _, op_time = self.sample_service_time(len(all_items))
-            yield self.hold(op_time, mode="SERVING")
-
-            for item in all_items:
-                item.status = "DELIVERED"
-
-            for order in orders:
-                if self.all_items_delivered(order):
-                    order.status = "COMPLETED"
-                    order.completion_time = self.env.now()
-                    order.CompletionTime = self.env.now()
-                    self.save_order_data(order)
-
-            my_agv.current_task = None
-            if hasattr(my_agv, "route"):
-                my_agv.route = []
-            if hasattr(my_agv, "orders"):
-                my_agv.orders = []
-            if hasattr(my_agv, "payload_mass"):
-                my_agv.payload_mass = 0.0
-            if hasattr(my_agv, "items_loaded"):
-                my_agv.items_loaded = 0
-            my_agv.status = AGVStatus.IDLE
-            my_agv.activate()
-            self.busy = False
-
-    def first_of_queue(self):
-        """Return the first AGV in MyQueue, matching the PDL FirstofQueue step."""
-        return self.MyQueue[0]
-
-    def sample_service_time(self, n_items: int) -> tuple[float, float]:
-        """Sample AGV and operator service time for the given number of items."""
-        return self.service_time_generator.sample_service_time(n_items)
-
-    def gather_all_items(self, orders) -> list:
-        """Collect all items from a list of orders."""
-        items = []
-        for order in orders:
-            if hasattr(order, "items"):
-                items.extend(order.items)
-            elif hasattr(order, "item"):
-                items.append(order.item)
-        return items
-
-    def gather_all_items_from_task(self, task) -> list:
-        """Fallback for task models that store items directly instead of via orders."""
-        if task is None:
-            return []
-        if hasattr(task, "items"):
-            return list(task.items)
-        if hasattr(task, "all_items"):
-            return list(task.all_items)
-        return []
-
-    def get_orders_from_task(self, task) -> list:
-        """Return the orders belonging to an AGV task."""
-        if task is not None and hasattr(task, "orders"):
-            return list(task.orders)
-        return []
-
-    def all_items_delivered(self, order) -> bool:
-        """Check whether every item in an order has status DELIVERED."""
-        return all(
-            getattr(item, "status", None) == "DELIVERED"
-            for item in self.gather_all_items([order])
-        )
-
-    def save_order_data(self, order) -> None:
-        """Store completed orders for later KPI analysis."""
-        self.processed_orders.append(order)
+            if self.state == "IDLE":
+                if len(self.queue) == 0:
+                    self.passivate()
+                    continue
+                    
+                # Start serving
+                self.state = "UNLOADING"
+                self.current_agv = self.queue.pop()
+                self.current_task = self.current_agv.current_task
+                
+                if not self.current_task:
+                    # Invalid state, clean up and reset
+                    self.current_agv.status = AGVStatus.IDLE
+                    self.current_agv.activate()
+                    self.current_agv = None
+                    self.current_task = None
+                    self.state = "IDLE"
+                    self.hold(0) # Re-evaluate immediately
+                    continue
+                    
+                all_items = self.current_task.all_items
+                n_items = len(all_items)
+                
+                agv_time, op_time = self.service_time_generator.sample_service_time(n_items)
+                self.remaining_op_time = max(0.0, op_time - agv_time)
+                
+                for item in all_items:
+                    item.status = "DELIVERED"
+                    
+                self.hold(agv_time, mode="UNLOADING")
+                continue
+                
+            elif self.state == "UNLOADING":
+                # AGV is done, release it
+                if hasattr(self.current_agv, "complete_task"):
+                    self.current_agv.complete_task()
+                self.current_agv.status = AGVStatus.IDLE
+                self.current_agv.activate()
+                
+                # Move to packing phase
+                if self.remaining_op_time > 0:
+                    self.state = "PACKING"
+                    self.hold(self.remaining_op_time, mode="PACKING")
+                    continue
+                else:
+                    # No packing time left, jump straight to finish
+                    self.state = "FINISHING"
+                    self.hold(0)
+                    continue
+                    
+            elif self.state == "PACKING" or self.state == "FINISHING":
+                # Job is completely done
+                if self.current_task:
+                    for order in self.current_task.orders:
+                        order.status = "COMPLETED"
+                        order.completion_time = self.env.now()
+                        self.processed_orders.append(order)
+                        
+                self.current_agv = None
+                self.current_task = None
+                self.state = "IDLE"
+                
+                # Immediately loop back to check queue
+                self.hold(0)
+                continue
