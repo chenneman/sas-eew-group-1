@@ -3,12 +3,7 @@ Standalone test script for verifying AGV behavior.
 Runs entirely isolated using mock Server and Charger components.
 """
 
-import sys
-import os
 import salabim as sim
-
-# Ensure the src directory is accessible
-#sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.models.agv import AGV, AGVStatus
 from src.models.task import Task, PickupSegment
