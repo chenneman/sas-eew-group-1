@@ -75,7 +75,7 @@ class AGV(sim.Component):
 
     def get_anim_text(self, t: float) -> str:
         """Dynamically generates the text to display above the AGV."""
-        return f"AGV{self.agv_id}\nBat:{self.battery / MAX_BATTERY * 100:.0f}%\nItems:{self.items_loaded}"
+        return f"AGV{self.agv_id}\nBat:{self.soc:.0f}%\nItems:{self.items_loaded}"
 
     def x(self, t: float) -> float:
         """Calculates interpolated X coordinate for animation."""
