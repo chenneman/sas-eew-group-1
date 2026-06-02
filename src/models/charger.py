@@ -45,7 +45,7 @@ class TCharger(sim.Component):
             if charging_time > 0:
                 yield self.hold(charging_time, mode="CHARGING")
 
-            agv.soc = self.max_battery(agv)
+            agv.battery = self.max_battery(agv)
             self.move_agv_to_idle_spot(agv)
             agv.status = AGVStatus.IDLE
             agv.activate()

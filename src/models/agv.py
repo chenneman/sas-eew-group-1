@@ -5,6 +5,8 @@ AGV simulation component and state models.
 import salabim as sim
 from enum import Enum
 
+from src.config import MAX_BATTERY, BATTERY_THRESHOLD, DRIVE_SPEED, E_BASE, ALPHA
+
 
 class AGVStatus(Enum):
     """Possible AGV states."""
@@ -39,12 +41,7 @@ class AGV(sim.Component):
         self.available_agvs = available_agvs
 
         # AGV Parameters
-        self.max_battery = 621.6
-        self.soc = self.max_battery
-        self.soc_threshold = 0.2 * self.max_battery # 20 percent battery threshold
-        self.drive_speed = 3.5
-        self.e_base = 0.0489
-        self.e_alpha = 0.0001
+        self.battery = MAX_BATTERY
 
         # State tracking
         self.status = AGVStatus.IDLE
@@ -71,9 +68,14 @@ class AGV(sim.Component):
             fontsize=12
         )
 
+    @property
+    def soc(self) -> float:
+        """Percentage of battery remaining."""
+        return self.battery / MAX_BATTERY * 100
+
     def get_anim_text(self, t: float) -> str:
         """Dynamically generates the text to display above the AGV."""
-        return f"AGV{self.agv_id}\nBat:{self.soc/self.max_battery*100:.0f}%\nItems:{self.items_loaded}"
+        return f"AGV{self.agv_id}\nBat:{self.battery / MAX_BATTERY * 100:.0f}%\nItems:{self.items_loaded}"
 
     def x(self, t: float) -> float:
         """Calculates interpolated X coordinate for animation."""
@@ -145,7 +147,7 @@ class AGV(sim.Component):
             self.payload_mass = 0.0
             self.items_loaded = 0
 
-            if self.soc < self.soc_threshold:
+            if self.battery < BATTERY_THRESHOLD:
                 if charger_node is not None:
                     self.status = AGVStatus.CHARGING
                     self.drive_route(
@@ -170,11 +172,11 @@ class AGV(sim.Component):
             self.next_node = route_node_ids[i + 1]
 
             dist = self.graph[self.current_node][self.next_node]['weight']
-            travel_time = dist / self.drive_speed
+            travel_time = dist / DRIVE_SPEED
 
             self.hold(travel_time, mode="MOVING")
 
-            energy_used = (self.e_base + (self.e_alpha * self.payload_mass)) * dist
-            self.soc -= energy_used
+            energy_used = (E_BASE + (ALPHA * self.payload_mass)) * dist
+            self.battery -= energy_used
 
         self.current_node = route_node_ids[-1]

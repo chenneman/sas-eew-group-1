@@ -10,6 +10,7 @@ from src.models.task import Task, PickupSegment
 from src.models.item import Item
 from src.models.graph import NodeType, Node, RoutingGraph
 
+from src.config import MAX_BATTERY, BATTERY_THRESHOLD
 
 # --- Mock Components ---
 
@@ -40,7 +41,7 @@ class MockCharger(sim.Component):
 
             agv = self.queue.pop()
             self.hold(15)
-            agv.soc = agv.max_battery
+            agv_battery = MAX_BATTERY
             agv.activate()
 
 
@@ -82,7 +83,7 @@ class MockControlSystem(sim.Component):
                 # Artificially drain battery to force charging test every other task
                 if self.task_count % 2 == 0:
                     print(f"\n[Mock Dispatcher] Artificially draining AGV {agv.agv_id} battery to test charging sequence!\n")
-                    agv.soc = agv.soc_threshold + 5.0  # Drop close to threshold so task drain pushes it under
+                    agv_battery = BATTERY_THRESHOLD + 5.0  # Drop close to threshold so task drain pushes it under
 
                 agv.activate()
 

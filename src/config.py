@@ -22,3 +22,17 @@ WARMUP_MIN     = 30
 HORIZON_MIN    = 24 * 60
 TOTAL_MIN      = WARMUP_MIN + HORIZON_MIN
 N_REPS         = 10
+MAX_WAIT_TIME = 5 # min
+BATCH_SIZE = 3 # orders
+
+# AGV parameters
+MAX_BATTERY    = 621.6 # Wh
+SOC_THRESHOLD   = 10 # %
+BATTERY_THRESHOLD  = 0.01 * SOC_THRESHOLD * MAX_BATTERY
+DRIVE_SPEED   = 3.5 # m/s
+E_BASE        = 0.0489 # Wh/m
+ALPHA       = 0.0001 # Wh/(kg·m)
+MAX_VOLUME = 600 * 400 * 400 # mm^3
+MAX_PAYLOAD = 40.0 # kg
+CHARGE_RATE = 43.17 # Wh/min
+

@@ -6,6 +6,9 @@ from src.models.agv import AGVStatus
 from src.models.TTask import TTask
 import networkx as nx
 
+from src.config import (BATCH_SIZE, MAX_WAIT_TIME, MAX_BATTERY, MAX_VOLUME, MAX_PAYLOAD, 
+                        BATTERY_THRESHOLD, E_BASE, ALPHA)
+
 
 class TControlSystem(sim.Component):
     def setup(
@@ -13,8 +16,8 @@ class TControlSystem(sim.Component):
         warehouse,
         order_queue,
         available_agvs,
-        batch_size=3,
-        max_wait_time=5
+        batch_size=BATCH_SIZE,
+        max_wait_time=MAX_WAIT_TIME
     ):
         self.warehouse = warehouse
         self.order_queue = order_queue
@@ -144,7 +147,7 @@ class TControlSystem(sim.Component):
 
         #battery level of agvs
         AGVb = {
-            agv.agv_id: agv.soc
+            agv.agv_id: agv.battery
             for agv in available_agvs
         }
 
@@ -154,12 +157,6 @@ class TControlSystem(sim.Component):
         # Parameters
         # ============================================================
 
-        Qv = 600 * 400 * 400
-        Qw = 40.0
-        mb = 621.6
-        SOC_t = 0.10 * mb
-        E_base = 0.0489
-        alpha = 0.0001
         M = 10000
         BIG_REWARD = 1000000000
 
@@ -174,8 +171,8 @@ class TControlSystem(sim.Component):
         y = model.addVars(O, V, vtype=GRB.BINARY, name="y")                            #order connected to agv
         x = model.addVars(A, V, vtype=GRB.BINARY, name="x")                            # agv drives over edge
         u = model.addVars(V, vtype=GRB.BINARY, name="u")                               #agv is being used
-        b = model.addVars(N, V, lb=SOC_t, ub=mb, vtype=GRB.CONTINUOUS, name="b")       #battery level of agv at node
-        q = model.addVars(N, V, lb=0, ub=Qw, vtype=GRB.CONTINUOUS, name="q")           # weight of orders on an agv at node
+        b = model.addVars(N, V, lb=BATTERY_THRESHOLD, ub=MAX_BATTERY, vtype=GRB.CONTINUOUS, name="b")       #battery level of agv at node
+        q = model.addVars(N, V, lb=0, ub=MAX_PAYLOAD, vtype=GRB.CONTINUOUS, name="q")           # weight of orders on an agv at node
 
         pickup_weight = {
             (n, v): gp.quicksum(
@@ -191,10 +188,10 @@ class TControlSystem(sim.Component):
         # Objective
         # ============================================================
 
-        #minimize the energy consumption (alpha * laod + base) times the distance driven for agvs
+        #minimize the energy consumption (ALPHA * laod + base) times the distance driven for agvs
         model.setObjective(
             gp.quicksum(
-                (E_base + alpha * q[i, v]) * distance[i, j] * x[i, j, v]
+                (E_BASE + ALPHA * q[i, v]) * distance[i, j] * x[i, j, v]
                 for i, j in A
                 for v in V
             )- BIG_REWARD * gp.quicksum(y[o, v] for o in O for v in V),
@@ -216,7 +213,7 @@ class TControlSystem(sim.Component):
         # dont exceed weight capacity of an agv
         model.addConstrs(
             (
-                gp.quicksum(Ow[o] * y[o, v] for o in O) <= Qw
+                gp.quicksum(Ow[o] * y[o, v] for o in O) <= MAX_PAYLOAD
                 for v in V
             ),
             name="weight_capacity"
@@ -225,7 +222,7 @@ class TControlSystem(sim.Component):
         # dont exceed volume capacity of an agv
         model.addConstrs(
             (
-                gp.quicksum(Ov[o] * y[o, v] for o in O) <= Qv
+                gp.quicksum(Ov[o] * y[o, v] for o in O) <= MAX_VOLUME
                 for v in V
             ),
             name="volume_capacity"
@@ -302,7 +299,7 @@ class TControlSystem(sim.Component):
         model.addConstrs(
             (
                 q[j, v] >= q[i, v] + pickup_weight[j, v]
-                - Qw * (1 - x[i, j, v])
+                - MAX_PAYLOAD * (1 - x[i, j, v])
                 for i, j in A
                 for v in V
             ),
@@ -312,7 +309,7 @@ class TControlSystem(sim.Component):
         model.addConstrs(
             (
                 q[j, v] <= q[i, v] + pickup_weight[j, v]
-                + Qw * (1 - x[i, j, v])
+                + MAX_PAYLOAD * (1 - x[i, j, v])
                 for i, j in A
                 for v in V
             ),
@@ -332,7 +329,7 @@ class TControlSystem(sim.Component):
         # model.addConstrs(
         #     (
         #         b[j, v] <= b[i, v]
-        #         - (E_base + alpha * q[i, v]) * distance[i, j]
+        #         - (E_BASE + ALPHA * q[i, v]) * distance[i, j]
         #         + M * (1 - x[i, j, v])
         #         for i, j in A
         #         for v in V
@@ -343,7 +340,7 @@ class TControlSystem(sim.Component):
         # model.addConstrs(
         #     (
         #         b[j, v] >= b[i, v]
-        #         - (E_base + alpha * q[i, v]) * distance[i, j]
+        #         - (E_BASE + ALPHA * q[i, v]) * distance[i, j]
         #         - M * (1 - x[i, j, v])
         #         for i, j in A
         #         for v in V
