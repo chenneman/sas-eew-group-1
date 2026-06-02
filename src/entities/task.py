@@ -4,7 +4,8 @@ Task data model.
 
 from dataclasses import dataclass, field
 from typing import Any
-from entities.item import Item
+
+from src.entities.item import Item
 
 @dataclass
 class PickupSegment:

@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 import pandas as pd
 from pathlib import Path
+
 from src.utils.paths import SELECTED_ITEMS_CSV
 
 @dataclass(frozen=False)

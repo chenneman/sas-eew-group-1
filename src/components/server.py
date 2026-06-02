@@ -2,8 +2,8 @@
 
 import salabim as sim
 
-from components.agv import AGVStatus
-from environment.service_time_generator import ServiceTimeGenerator
+from src.components.agv import AGVStatus
+from src.environment.service_time_generator import ServiceTimeGenerator
 
 
 class Server(sim.Component):

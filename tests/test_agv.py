@@ -5,10 +5,10 @@ Runs entirely isolated using mock Server and Charger components.
 
 import salabim as sim
 
-from components.agv import AGV
-from entities.task import Task, PickupSegment
-from entities.item import Item
-from environment.graph import NodeType, Node, RoutingGraph
+from src.components.agv import AGV
+from src.entities.task import Task, PickupSegment
+from src.entities.item import Item
+from src.environment.graph import NodeType, Node, RoutingGraph
 
 from src.config import MAX_BATTERY, BATTERY_THRESHOLD
 
