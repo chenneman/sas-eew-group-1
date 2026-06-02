@@ -1,16 +1,15 @@
-
 import salabim as sim
 import gurobipy as gp
 from gurobipy import GRB
 from src.models.agv import AGVStatus
-from src.models.TTask import TTask
+from src.models.task import Task
 import networkx as nx
 
 from src.config import (BATCH_SIZE, MAX_WAIT_TIME, MAX_BATTERY, MAX_VOLUME, MAX_PAYLOAD, 
                         BATTERY_THRESHOLD, E_BASE, ALPHA)
 
 
-class TControlSystem(sim.Component):
+class ControlSystem(sim.Component):
     def setup(
         self,
         warehouse,
@@ -26,53 +25,59 @@ class TControlSystem(sim.Component):
         self.max_wait_time = max_wait_time
         self.agvs = available_agvs
         self.last_batch_time = 0
+        self.task_counter = 0
+
+    def _generate_task_id(self):
+        self.task_counter += 1
+        return self.task_counter
 
     def process(self):
-        #Check if batch size is reached or max waiting time
-        while True:
-            while len(self.order_queue) == 0:
-                self.passivate()
-            while len(self.order_queue) < self.batch_size:
-                if self.env.now() - self.last_batch_time >= self.max_wait_time:
-                    break
-                yield self.hold(1)
+        # Yieldless state machine: process is called repeatedly upon reactivation
+        if len(self.order_queue) == 0:
+            self.passivate()
+            return
+            
+        # Check if we should wait for more orders (up to batch_size)
+        if len(self.order_queue) < self.batch_size:
+            if self.env.now() - self.last_batch_time < self.max_wait_time:
+                self.hold(1)
+                return
 
-            #Check number of available agvs
-            available_agvs = [
-                agv for agv in self.agvs
-                if agv.status == AGVStatus.IDLE
+        # Check number of available agvs
+        available_agvs = [
+            agv for agv in self.agvs
+            if agv.status == AGVStatus.IDLE
+        ]
 
-            ]
+        if len(available_agvs) == 0:
+            self.passivate()
+            return
 
-            while len(available_agvs) == 0:
-                self.passivate()
-                available_agvs = [
-                    agv for agv in self.agvs
-                    if agv.status == AGVStatus.IDLE
-                ]
+        # Make a batch of the orders that is waiting to be handled
+        batch_orders = list(self.order_queue)[:self.batch_size]
 
-            #Make a batch of the orders that is waiting to be handled
-            batch_orders = list(self.order_queue)[:self.batch_size]
+        # Make tasks based on the routing algorithm
+        tasks = self.routing_algorithm(
+            orders=batch_orders,
+            available_agvs=available_agvs
+        )
 
-            #make tasks based on the routing algorithm
-            tasks = self.routing_algorithm(
-                orders=batch_orders,
-                available_agvs=available_agvs
-            )
-
-            #Assign task to agv
-            for task in tasks:
-                agv = task.agv
-                agv.current_task = task
-                agv.route = task.route
-                agv.orders = task.orders
-                agv.status = AGVStatus.MOVING
-                for order in task.orders:
-                    order.status = "ASSIGNED"
-                    order.leave(self.order_queue)
-                agv.activate()
-            self.last_batch_time = self.env.now()
-            yield self.hold(0)
+        # Assign task to agv
+        for task in tasks:
+            agv = task.agv
+            agv.current_task = task
+            agv.route = task.route
+            agv.orders = task.orders
+            agv.status = AGVStatus.MOVING
+            for order in task.orders:
+                order.status = "ASSIGNED"
+                order.leave(self.order_queue)
+            agv.activate()
+            
+        self.last_batch_time = self.env.now()
+        
+        # Hold a tiny amount of time to allow state changes to propagate before next check
+        self.hold(0)
     
 
     #Define the routing algorithm 
@@ -127,7 +132,7 @@ class TControlSystem(sim.Component):
         }
         #order location
         Ol = {
-            order.order_id: self.warehouse.location_to_node_id[order.item.shelf_location]
+            order.order_id: order.item.node_id
             for order in orders
         }
 
@@ -406,13 +411,14 @@ class TControlSystem(sim.Component):
 
             selected_agv = agv_by_id[v]
 
-            task = TTask(
+            task = Task(
+                task_id=self._generate_task_id(),
                 orders=assigned_orders,
                 route=route_node_ids,
                 agv=selected_agv,
-                creation_time=self.env.now())
+                creation_time=self.env.now()
+            )
 
             tasks.append(task)
 
         return tasks
-        

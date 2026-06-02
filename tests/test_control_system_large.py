@@ -2,8 +2,8 @@ import salabim as sim
 
 from src.models.graph import RoutingGraph, Node, NodeType
 from src.models.item import Item
-from src.models.order_generator import TOrder
-from src.models.controlsystem import TControlSystem
+from src.models.order import Order
+from src.models.control_system import ControlSystem
 from src.models.agv import AGVStatus
 
 
@@ -50,13 +50,13 @@ class MockAGV:
     def __init__(self, agv_id):
         self.agv_id = agv_id
         self.status = AGVStatus.IDLE
-        self.soc = 621.6
+        self.battery = 621.6
         self.current_task = None
         self.route = None
         self.orders = []
 
 
-def make_item(sku, name, weight, volume, shelf_location):
+def make_item(sku, name, weight, volume, node_id):
     return Item(
         sku=sku,
         name=name,
@@ -66,7 +66,7 @@ def make_item(sku, name, weight, volume, shelf_location):
         height=1,
         volume=volume,
         url="",
-        shelf_location=shelf_location,
+        node_id=node_id,
     )
 
 
@@ -77,15 +77,15 @@ def run_test():
     order_queue = []
 
     items = [
-        make_item(1, "Box 1", 10.0, 1000, (1, 0)),
-        make_item(2, "Box 2", 15.0, 1000, (2, 0)),
-        make_item(3, "Box 3", 20.0, 1000, (3, 0)),
-        make_item(4, "Box 4", 8.0, 1000, (2, 1)),
+        make_item(1, "Box 1", 10.0, 1000, 2),
+        make_item(2, "Box 2", 15.0, 1000, 3),
+        make_item(3, "Box 3", 20.0, 1000, 4),
+        make_item(4, "Box 4", 8.0, 1000, 6),
     ]
 
     orders = [
-        TOrder(arrival_sim_min=0, item=item)
-        for item in items
+        Order(order_id=i+1, arrival_min=0, item=item)
+        for i, item in enumerate(items)
     ]
 
     order_queue.extend(orders)
@@ -95,7 +95,7 @@ def run_test():
         MockAGV(2),
     ]
 
-    control_system = TControlSystem(
+    control_system = ControlSystem(
         warehouse=warehouse,
         order_queue=order_queue,
         available_agvs=agvs,
@@ -138,31 +138,31 @@ def run_test():
 
     print("======================================\n")
 
-    print("\n===== TTASK CHECK =====")
+    print("\n===== TASK CHECK =====")
 
     for task in tasks:
 
         print(task)
 
-        print(f"Task ID: {task.id}")
+        print(f"Task ID: {task.task_id}")
 
         print(f"AGV ID: {task.agv.agv_id}")
 
         print(f"Orders: {[order.order_id for order in task.orders]}")
 
-        print(f"Items: {[item.name for item in task.items]}")
+        print(f"Items: {[item.name for item in task.all_items]}")
 
         print(f"Route: {task.route}")
 
         print(f"Creation time: {task.creation_time}")
 
-        assert len(task.orders) == len(task.items)
+        assert len(task.orders) == len(task.all_items)
 
         assert task.agv is not None
 
         assert len(task.route) > 0
 
-    print("TTask works correctly.")
+    print("Task works correctly.")
 
 if __name__ == "__main__":
     run_test()
