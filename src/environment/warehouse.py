@@ -39,17 +39,17 @@ class Warehouse:
 
         # 2. Build RoutingGraph
         self.routing_graph = RoutingGraph()
-        all_nodes, self.location_to_node_id = self._build_graph(
+        self.all_nodes, self.location_to_node_id = self._build_graph(
             length, width,
             shelf_x_set, shelf_y_set,
             packing_coord_set, charging_coord_set, idle_coord_set
         )
 
         # 3. Lookup attributes
-        self.shelf_nodes = [n for n in all_nodes if n.type == NodeType.SHELF]
-        self.packing_nodes = [n for n in all_nodes if n.type == NodeType.PACKING]
-        self.charging_nodes = [n for n in all_nodes if n.type == NodeType.CHARGING]
-        self.idle_nodes = [n for n in all_nodes if n.type == NodeType.IDLE]
+        self.shelf_nodes = [n for n in self.all_nodes if n.type == NodeType.SHELF]
+        self.packing_nodes = [n for n in self.all_nodes if n.type == NodeType.PACKING]
+        self.charging_nodes = [n for n in self.all_nodes if n.type == NodeType.CHARGING]
+        self.idle_nodes = [n for n in self.all_nodes if n.type == NodeType.IDLE]
 
         # Extracted lists of IDs for quick access
         self.shelf_node_ids = [n.id for n in self.shelf_nodes]
@@ -60,6 +60,35 @@ class Warehouse:
         # Stateful Salabim Queues (populated later by build_queues)
         self.packing_queues: list[dict] = []
         self.charger_queues: list[dict] = []
+
+        self._animate_layout()
+
+    def _animate_layout(self):
+        """Draws the static grid and functional zones using sim.AnimateRectangle."""
+        scale = 30 # pixels per grid unit
+        
+        for node in self.all_nodes:
+            x, y = node.coords
+            
+            # Determine color based on node type
+            if node.type == NodeType.SHELF:
+                color = "saddlebrown"
+            elif node.type == NodeType.PACKING:
+                color = "blue"
+            elif node.type == NodeType.CHARGING:
+                color = "green"
+            elif node.type == NodeType.IDLE:
+                color = "gray"
+            else:
+                color = "white"
+                
+            # Draw the cell
+            sim.AnimateRectangle(
+                spec=(x * scale, y * scale, (x + 1) * scale, (y + 1) * scale),
+                fillcolor=color,
+                linecolor="black",
+                linewidth=1
+            )
 
     def _generate_geometry(
             self,

@@ -37,10 +37,9 @@ class SimulationEngine:
     def __init__(self, trace: bool = False, animate: bool = False):
         self.env = sim.Environment(trace=trace)
         self.animate = animate
-        
+
         if self.animate:
-            #  will configure animation parameters here later in Phase 3
-            pass
+            self.env.animation_parameters(animate=True, speed=10, width=1200, height=800)
 
         self._build_world()
         self._instantiate_queues()
@@ -50,10 +49,15 @@ class SimulationEngine:
         """Initializes the static warehouse layout and math engines."""
         # Load items (using default paths configured in utils)
         self.items = load_items()
-        
+
         # Build the warehouse map (pure layout, no item injection)
         self.warehouse = Warehouse()
-        
+
+        # Sequentially map items to physical shelf nodes (1-to-1)
+        shelf_nodes = self.warehouse.shelf_node_ids
+        for item, shelf_id in zip(self.items, shelf_nodes):
+            item.node_id = shelf_id
+
         # Initialize math engine
         self.service_time_generator = ServiceTimeGenerator()
 

@@ -7,8 +7,8 @@ from src.core.simulation import SimulationEngine
 if __name__ == "__main__":
     print("Initializing Simulation Engine...")
     
-    # Instantiate the simulation engine with tracing on for our tiny integration test
-    engine = SimulationEngine(trace=True, animate=False)
+    # Instantiate the simulation engine with animation on
+    engine = SimulationEngine(trace=False, animate=True)
     
     #  run for a very short duration first (60 minutes) to verify no immediate crashes
     test_duration = 60
