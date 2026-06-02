@@ -18,6 +18,7 @@ ORDERS_PER_HOUR = [
 ]
 
 # Simulation Run Parameters
+INNOVATION_ENABLED = True  # True = Multi-stop picking, False = 1 order per AGV
 SIM_START_HOUR = 0
 WARMUP_MIN     = 30
 HORIZON_MIN    = 24 * 60

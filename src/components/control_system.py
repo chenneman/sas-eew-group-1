@@ -1,15 +1,24 @@
+"""
+Central control system for the warehouse simulation.
+Manages the order queue, dispatches idle AGVs, and uses a Gurobi optimization model
+to route AGVs to pick up items efficiently.
+"""
+
 import salabim as sim
 import gurobipy as gp
 from gurobipy import GRB
 from src.components.agv import AGVStatus
 from src.entities.task import Task
-import networkx as nx
 
-from src.config import (BATCH_SIZE, MAX_WAIT_TIME, MAX_BATTERY, MAX_VOLUME, MAX_PAYLOAD, 
-                        BATTERY_THRESHOLD, E_BASE, ALPHA)
+from src.config import (BATCH_SIZE, MAX_WAIT_TIME, MAX_BATTERY, MAX_VOLUME, MAX_PAYLOAD,
+                        BATTERY_THRESHOLD, E_BASE, ALPHA, INNOVATION_ENABLED)
 
-
+# TODO refactor spaghetti to more functions, add typehints
 class ControlSystem(sim.Component):
+    """
+    The brain of the AGV fleet. Pools incoming orders into batches and uses a Mixed-Integer
+    Programming (MIP) model via Gurobi to assign orders and calculate optimal routing paths.
+    """
     def setup(
         self,
         warehouse,
@@ -18,6 +27,16 @@ class ControlSystem(sim.Component):
         batch_size=BATCH_SIZE,
         max_wait_time=MAX_WAIT_TIME
     ):
+        """
+        Initializes the ControlSystem component.
+
+        Args:
+            warehouse: The Warehouse environment component containing the layout graph.
+            order_queue (sim.Queue): The queue containing pending Orders.
+            available_agvs (sim.Queue): The queue containing idle AGVs ready for dispatch.
+            batch_size (int): The number of orders to pool before triggering a routing run.
+            max_wait_time (float): The maximum time (in sim minutes) to wait for a full batch before triggering.
+        """
         self.warehouse = warehouse
         self.order_queue = order_queue
         self.available_agvs = available_agvs
@@ -36,7 +55,7 @@ class ControlSystem(sim.Component):
         if len(self.order_queue) == 0:
             self.passivate()
             return
-            
+
         # Check if we should wait for more orders (up to batch_size)
         if len(self.order_queue) < self.batch_size:
             if self.env.now() - self.last_batch_time < self.max_wait_time:
@@ -73,15 +92,27 @@ class ControlSystem(sim.Component):
                 order.status = "ASSIGNED"
                 order.leave(self.order_queue)
             agv.activate()
-            
+
         self.last_batch_time = self.env.now()
-        
+
         # Hold a tiny amount of time to allow state changes to propagate before next check
         self.hold(0)
-    
 
-    #Define the routing algorithm 
-    def routing_algorithm(self, orders, available_agvs):
+
+    def routing_algorithm(self, orders, available_agvs) -> list[Task]:
+        """
+        Executes the Gurobi optimization model to assign orders to AGVs and determine the optimal route.
+
+        This translates the mathematical output (flat active edges) into a sequence of actionable
+        `PickupSegment` chunks for the AGV's command-driven navigation.
+
+        Args:
+            orders (list): A batch of Order objects to be fulfilled.
+            available_agvs (list): A list of currently idle AGV components.
+
+        Returns:
+            list[Task]: A list of newly created Task objects containing structured routes and assignments.
+        """
         #As long as there are no orders or no agvs --> return empty (double safety)
         if len(orders) == 0 or len(available_agvs) == 0:
             return []
@@ -136,7 +167,7 @@ class ControlSystem(sim.Component):
             for order in orders
         }
 
-        
+
         # ============================================================
         # AGVs
         # ============================================================
@@ -156,7 +187,7 @@ class ControlSystem(sim.Component):
             for agv in available_agvs
         }
 
-        
+
 
         # ============================================================
         # Parameters
@@ -208,11 +239,12 @@ class ControlSystem(sim.Component):
         # Constraints
         # ============================================================
 
-        #Innovation constraint!! max 1 order = no innovation, when innovation this constraint should be turned off
-        # model.addConstrs((
-        #     gp.quicksum(y[o, v] for o in O) <= 1
-        #     for v in V),
-        #     name="max_one_order_per_agv")
+        # Innovation constraint: If False, restrict to max 1 order per AGV (no multi-stop picking)
+        if not INNOVATION_ENABLED:
+            model.addConstrs((
+                gp.quicksum(y[o, v] for o in O) <= 1
+                for v in V),
+                name="max_one_order_per_agv")
         
 
         # dont exceed weight capacity of an agv
