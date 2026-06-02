@@ -5,6 +5,7 @@ AGV simulation component and state models.
 import salabim as sim
 from enum import Enum
 
+from src.environment.graph import NodeType
 from src.config import MAX_BATTERY, BATTERY_THRESHOLD, DRIVE_SPEED, E_BASE, ALPHA
 
 
@@ -106,7 +107,6 @@ class AGV(sim.Component):
 
     def process(self):
         """Main lifecycle loop of the AGV component."""
-        from environment.graph import NodeType
 
         # Find charging node dynamically using underlying nx graph
         charger_node = next(

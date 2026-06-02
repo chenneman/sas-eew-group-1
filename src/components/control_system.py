@@ -1,8 +1,8 @@
 import salabim as sim
 import gurobipy as gp
 from gurobipy import GRB
-from components.agv import AGVStatus
-from entities.task import Task
+from src.components.agv import AGVStatus
+from src.entities.task import Task
 import networkx as nx
 
 from src.config import (BATCH_SIZE, MAX_WAIT_TIME, MAX_BATTERY, MAX_VOLUME, MAX_PAYLOAD, 
@@ -367,6 +367,8 @@ class ControlSystem(sim.Component):
         # Create tasks
         # ============================================================
 
+        from src.entities.task import Task, PickupSegment
+
         tasks = []
 
         for v in V:
@@ -385,36 +387,56 @@ class ControlSystem(sim.Component):
                 if x[i, j, v].X > 0.5
             ]
 
-            order_nodes = [
-                Ol[o]
-                for o in O
-                if y[o, v].X > 0.5
-            ]
-            route_node_ids = [idle_spot]
-            current = idle_spot
-            for node in order_nodes:
-                part = nx.shortest_path(
-                    G,
-                    current,
-                    node,
-                    weight="weight"
-                )
-                route_node_ids += part[1:]
-                current = node
-            part = nx.shortest_path(
-                G,
-                current,
-                packing_station,
-                weight="weight"
-            )
-            route_node_ids += part[1:]
+            # Trace the exact path planned by Gurobi
+            current_node = idle_spot
+            full_path = [current_node]
+            
+            # Safety against infinite loops if Gurobi outputs a disconnected cycle
+            max_steps = len(N) + 1 
+            steps = 0
+            while current_node != packing_station and steps < max_steps:
+                try:
+                    next_node = next(j for i, j in active_edges if i == current_node)
+                    full_path.append(next_node)
+                    current_node = next_node
+                    steps += 1
+                except StopIteration:
+                    break
+
+            # Group items by their shelf node
+            items_by_node = {}
+            for order in assigned_orders:
+                node = order.item.node_id
+                if node not in items_by_node:
+                    items_by_node[node] = []
+                items_by_node[node].append(order.item)
+
+            pickups = []
+            segment_start_idx = 0
+            
+            # Chunk the full path into PickupSegments
+            for idx, node in enumerate(full_path):
+                if node in items_by_node:
+                    segment_route = full_path[segment_start_idx : idx + 1]
+                    items_here = items_by_node.pop(node)
+                    
+                    pickups.append(PickupSegment(
+                        route=segment_route,
+                        items=items_here,
+                        pick_time=5.0 * len(items_here) # Basic 5s per item
+                    ))
+                    segment_start_idx = idx
+
+            dropoff_route = full_path[segment_start_idx:]
 
             selected_agv = agv_by_id[v]
 
             task = Task(
                 task_id=self._generate_task_id(),
                 orders=assigned_orders,
-                route=route_node_ids,
+                pickups=pickups,
+                dropoff_route=dropoff_route,
+                route=full_path, # Keep the flat route for legacy/reference
                 agv=selected_agv,
                 creation_time=self.env.now()
             )
