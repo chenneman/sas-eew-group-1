@@ -141,6 +141,13 @@ class AGV(sim.Component):
         }
         return colors.get(self.status, "black")
 
+    def complete_task(self):
+        """Cleans up the current task state. Called by the Server after unloading."""
+        self.current_task = None
+        self.payload_mass = 0.0
+        self.items_loaded = 0
+        self.tasks_completed += 1
+
     def process(self):
         """Main lifecycle loop of the AGV component."""
         import networkx as nx
@@ -200,11 +207,6 @@ class AGV(sim.Component):
             self._wakeup_component(target_server_queue)
             self.passivate(mode="UNLOADING")
 
-            self.current_task = None
-            self.payload_mass = 0.0
-            self.items_loaded = 0
-            self.tasks_completed += 1
-
             if self.battery < BATTERY_THRESHOLD:
                 if charger_nodes:
                     # Find the optimal charger: closest distance + penalty for queue length
@@ -253,7 +255,8 @@ class AGV(sim.Component):
             self.next_node = route_node_ids[i + 1]
 
             dist = self.graph[self.current_node][self.next_node]['weight']
-            travel_time = dist / DRIVE_SPEED
+            # dist [m] / speed [m/s] = time [s] -> convert to [min]
+            travel_time = (dist / DRIVE_SPEED) / 60.0
 
             self.hold(travel_time, mode="MOVING")
 

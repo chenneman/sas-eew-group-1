@@ -61,24 +61,26 @@ class ControlSystem(sim.Component):
                 self.passivate()
                 continue
 
-            # Check if we should wait for more orders (up to batch_size)
-            if len(self.order_queue) < self.batch_size:
-                if self.env.now() - self.last_batch_time < self.max_wait_time:
-                    self.hold(1)
-                    continue
-
-            # Check number of available agvs
-            available_agvs = [
-                agv for agv in self.agvs
-                if agv.status == AGVStatus.IDLE
-            ]
+            # Check number of available agvs (those waiting in the queue)
+            available_agvs = list(self.available_agvs)
             
             if len(available_agvs) == 0:
                 self.passivate()
                 continue
 
-            # Make a batch of the orders that is waiting to be handled
-            batch_orders = list(self.order_queue)[:self.batch_size]
+            # Check if we should wait for more orders (up to batch_size)
+            if len(self.order_queue) < self.batch_size:
+                # If we have orders and have waited enough, proceed. Else wait.
+                if len(self.order_queue) > 0 and (self.env.now() - self.last_batch_time >= self.max_wait_time):
+                    pass 
+                else:
+                    self.hold(1)
+                    continue
+
+            # Make a larger batch proportional to the number of available AGVs
+            num_available = len(available_agvs)
+            max_batch_to_check = num_available * self.batch_size
+            batch_orders = list(self.order_queue)[:max_batch_to_check]
 
             # Make tasks based on the routing algorithm
             tasks = self.routing_algorithm(
@@ -89,6 +91,11 @@ class ControlSystem(sim.Component):
             # Assign task to agv
             for task in tasks:
                 agv = task.agv
+                
+                # Critical: Remove from queue immediately so other loops don't see it
+                if agv in self.available_agvs:
+                    agv.leave(self.available_agvs)
+                
                 agv.current_task = task
                 agv.route = task.route
                 agv.orders = task.orders
@@ -333,7 +340,7 @@ class ControlSystem(sim.Component):
                     pickups.append(PickupSegment(
                         route=segment_path if not full_grid_path else segment_path,
                         items=items_here,
-                        pick_time=5.0 * len(items_here)
+                        pick_time=(5.0 * len(items_here)) / 60.0 # 5s per item -> minutes
                     ))
                 
                 if k == 0:

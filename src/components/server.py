@@ -57,8 +57,10 @@ class Server(sim.Component):
                 all_items = self.current_task.all_items
                 n_items = len(all_items)
                 
-                agv_time, op_time = self.service_time_generator.sample_service_time(n_items)
-                self.remaining_op_time = max(0.0, op_time - agv_time)
+                # ServiceTimeGenerator returns seconds, convert to minutes
+                agv_time_sec, op_time_sec = self.service_time_generator.sample_service_time(n_items)
+                agv_time = agv_time_sec / 60.0
+                self.remaining_op_time = max(0.0, (op_time_sec / 60.0) - agv_time)
                 
                 for item in all_items:
                     item.status = "DELIVERED"

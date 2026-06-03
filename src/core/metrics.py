@@ -12,7 +12,10 @@ from src.utils.paths import LOGS_DIR
 @dataclass
 class SimulationMetrics:
     """Aggregates performance data for the final report."""
+    total_orders_generated: int = 0
     total_orders_completed: int = 0
+    pending_orders: int = 0
+    in_progress_orders: int = 0
     energy_consumed_wh: float = 0.0
     order_fulfillment_times: list[float] = field(default_factory=list)
     agv_metrics: dict[int, dict] = field(default_factory=dict)
@@ -23,7 +26,10 @@ class SimulationMetrics:
         lines.append("\n" + "="*50)
         lines.append("      SAS AGV SIMULATION SUMMARY REPORT")
         lines.append("="*50)
+        lines.append(f"Total Orders Generated:    {self.total_orders_generated}")
         lines.append(f"Total Orders Fulfilled:    {self.total_orders_completed}")
+        lines.append(f"Orders Still Pending:      {self.pending_orders}")
+        lines.append(f"Orders In Progress:        {self.in_progress_orders}")
         
         if self.order_fulfillment_times:
             avg_time = np.mean(self.order_fulfillment_times)

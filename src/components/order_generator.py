@@ -47,14 +47,14 @@ class OrderGenerator(sim.Component):
         while True:
             # 1. Sample inter-arrival time
             mean_iat = mean_iat_minutes(self.env.now())
-            iat = sim.Exponential(mean_iat).sample()
+            iat = self.env.Exponential(mean_iat).sample()
             
             # Wait for the next arrival
             self.hold(iat)
             
             # 2. Generate the order
             self.orders_generated += 1
-            item = random.choice(self.items)
+            item = self.env.random.choice(self.items)
             
             order = Order(
                 order_id=self.orders_generated,

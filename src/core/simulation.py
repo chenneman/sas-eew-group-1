@@ -11,7 +11,7 @@ from src.environment.service_time_generator import ServiceTimeGenerator
 
 # Components
 from src.components.control_system import ControlSystem
-from src.components.agv import AGV
+from src.components.agv import AGV, AGVStatus
 from src.components.server import Server
 from src.components.charger import Charger
 from src.components.order_generator import OrderGenerator
@@ -130,6 +130,30 @@ class SimulationEngine:
             textcolor="yellow", fontsize=16
         )
         
+        # In-Progress Orders (Assigned but not yet completed)
+        def get_in_progress(t):
+            total_gen = self.order_generator.orders_generated
+            fulfilled = sum(len(server.processed_orders) for server in self.servers)
+            pending = len(self.order_queue)
+            return f"In-Progress: {total_gen - fulfilled - pending}"
+            
+        sim.AnimateText(
+            text=get_in_progress,
+            x=880, y=665,
+            textcolor="orange", fontsize=15
+        )
+        
+        # Active AGVs
+        def get_active_agvs(t):
+            active = sum(1 for agv in self.agvs if agv.status != AGVStatus.IDLE)
+            return f"Active AGVs: {active}/{len(self.agvs)}"
+            
+        sim.AnimateText(
+            text=get_active_agvs,
+            x=880, y=640,
+            textcolor="white", fontsize=14
+        )
+        
         # Live Order Log Background (Right side, shifted left by 90px)
         sim.AnimateRectangle(
             spec=(860, 50, 1090, 600),
@@ -231,14 +255,25 @@ class SimulationEngine:
 
     def finalize_metrics(self):
         """Aggregates all component-level data into the central metrics object."""
-        # 1. Aggregate Server data (Orders completed and fulfillment times)
+        # 1. Aggregate Order counts
+        self.metrics.total_orders_generated = self.order_generator.orders_generated
+        self.metrics.pending_orders = len(self.order_queue)
+
+        # 2. Aggregate Server data (Orders completed and fulfillment times)
         for server in self.servers:
             self.metrics.total_orders_completed += len(server.processed_orders)
             for order in server.processed_orders:
                 fulfillment_time = order.completion_time - order.arrival_min
                 self.metrics.order_fulfillment_times.append(fulfillment_time)
         
-        # 2. Aggregate AGV data (Energy and task counts)
+        # 3. Calculate In-Progress orders (Total - Pending - Fulfilled)
+        self.metrics.in_progress_orders = (
+            self.metrics.total_orders_generated - 
+            self.metrics.pending_orders - 
+            self.metrics.total_orders_completed
+        )
+
+        # 4. Aggregate AGV data (Energy and task counts)
         for agv in self.agvs:
             self.metrics.energy_consumed_wh += agv.total_energy_consumed
             self.metrics.agv_metrics[agv.agv_id] = {
