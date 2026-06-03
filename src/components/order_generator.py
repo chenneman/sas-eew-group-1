@@ -23,7 +23,7 @@ class OrderGenerator(sim.Component):
     Order object, assigning it a unique sequential ID.
     """
 
-    def setup(self, items: list, order_queue: list | None = None, control_system: sim.Component | None = None):
+    def setup(self, items: list, order_queue: list | None = None, control_system: sim.Component | None = None, live_order_log: list = None):
         """
         Setup the generator state.
         
@@ -31,10 +31,12 @@ class OrderGenerator(sim.Component):
             items: Sequence of Item objects to sample from.
             order_queue: Optional list where generated orders are appended.
             control_system: Optional reference to the ControlSystem to wake up.
+            live_order_log: Optional list to store string representations of generated orders.
         """
         self.items = items
         self.order_queue = order_queue
         self.control_system = control_system
+        self.live_order_log = live_order_log
         
         # Internal state tracking (Replaces the shared TOrder._next_id)
         self.orders_generated: int = 0
@@ -59,6 +61,10 @@ class OrderGenerator(sim.Component):
                 item=item,
                 arrival_min=self.env.now()
             )
+            
+            if self.live_order_log is not None:
+                log_msg = f"[{self.env.now():5.1f}] #{order.order_id} - {item.name[:10]} ({item.weight}kg)"
+                self.live_order_log.append(log_msg)
             
             # 3. Store and emit
             self.orders.append(order)

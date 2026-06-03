@@ -102,6 +102,38 @@ class Warehouse:
                 linewidth=0
             )
 
+            if node.type == NodeType.PACKING:
+                # Need to find the server ID or just generic packing label
+                # Since we don't have the exact ID here, we just use the index later.
+                pass
+                
+        # Add labels for packing and charging nodes
+        for i, node in enumerate(self.packing_nodes):
+            x_raw, y_raw = node.coords
+            x0 = x_raw * ANIMATION_SCALE
+            y1 = y_raw * ANIMATION_SCALE + ANIMATION_SCALE
+            sim.AnimateText(
+                text=f"Pack {i+1}",
+                x=x0 + ANIMATION_SCALE / 2,
+                y=y1 + 10,
+                textcolor="white",
+                fontsize=12,
+                text_anchor="c"
+            )
+
+        for i, node in enumerate(self.charging_nodes):
+            x_raw, y_raw = node.coords
+            x0 = x_raw * ANIMATION_SCALE
+            y0 = y_raw * ANIMATION_SCALE
+            sim.AnimateText(
+                text=f"Charge {i+1}",
+                x=x0 + ANIMATION_SCALE / 2,
+                y=y0 - 10,
+                textcolor="white",
+                fontsize=12,
+                text_anchor="c"
+            )
+
     def _generate_geometry(
             self,
             length: int, width: int, aisle_width: int, cross_aisle_spacing: int,

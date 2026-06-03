@@ -243,6 +243,14 @@ class ControlSystem(sim.Component):
         # Each order assigned to at most one AGV
         model.addConstrs((gp.quicksum(y[o, v] for v in V) <= 1 for o in O), name="order_assignment")
 
+        # Innovation constraint: If False, restrict to max 1 order per AGV
+        if not INNOVATION_ENABLED:
+            model.addConstrs((gp.quicksum(y[o, v] for o in O) <= 1 for v in V), name="max_one_order")
+
+        # Capacity constraints (Payload and Volume)
+        model.addConstrs((gp.quicksum(orders[O.index(o)].item.weight * y[o, v] for o in O) <= MAX_PAYLOAD for v in V), name="max_payload")
+        model.addConstrs((gp.quicksum(orders[O.index(o)].item.volume * y[o, v] for o in O) <= MAX_VOLUME for v in V), name="max_volume")
+
         # Simplified VRP Constraints (Standard VRP)
         for v in V:
             start_node = agv_start_nodes[v]

@@ -25,9 +25,13 @@ from src.config import (
     N_SERVERS,
     N_CHARGERS,
     CHARGE_RATE,
-    MAX_BATTERY
+    MAX_BATTERY,
+    INITIAL_ANIM_SPEED,
+    INITIAL_BATTERY_FACTOR,
+    LOG_TRACE_TO_FILE
 )
 
+from src.utils.paths import LOGS_DIR
 
 from src.core.metrics import SimulationMetrics
 
@@ -40,9 +44,15 @@ class SimulationEngine:
         self.env = sim.Environment(trace=trace)
         self.animate = animate
         self.metrics = SimulationMetrics()
+        
+        if LOG_TRACE_TO_FILE:
+            self.env.trace(True)
+            # Route salabim trace to file
+            self._trace_file = open("logs/trace.log", "w")
+            self.env.trace(out=self._trace_file)
 
         if self.animate:
-            self.env.animation_parameters(animate=True, speed=10, width=1200, height=800)
+            self.env.animation_parameters(animate=True, speed=INITIAL_ANIM_SPEED, width=1200, height=800)
             self.env.background_color("black")
 
         self._build_world()
@@ -105,20 +115,37 @@ class SimulationEngine:
             textcolor="yellow", fontsize=16
         )
         
-        # Active AGVs
-        def get_active_agvs(t):
-            active = sum(1 for agv in self.agvs if agv.status != "IDLE")
-            return f"Active AGVs: {active}/{len(self.agvs)}"
+        # Live Order Log Background (Right side)
+        sim.AnimateRectangle(
+            spec=(950, 50, 1180, 600),
+            fillcolor="#111111",
+            linecolor="gray",
+            linewidth=1,
+            arg="UI"
+        )
+        
+        sim.AnimateText(
+            text="Live Orders",
+            x=960, y=575,
+            textcolor="lightgreen", fontsize=14
+        )
+        
+        # Function to render the last 25 lines of the order log
+        def get_log_text(t):
+            lines = self.live_order_log[-25:]
+            return "\n".join(lines)
             
         sim.AnimateText(
-            text=get_active_agvs,
-            x=970, y=660,
-            textcolor="white", fontsize=14
+            text=get_log_text,
+            x=960, y=550,
+            textcolor="lightgray", fontsize=10,
+            text_anchor="nw"
         )
 
     def _instantiate_queues(self):
         """Creates the central communication queues and component mappings."""
         self.order_queue = [] # Standard list because Orders are passive dataclasses
+        self.live_order_log = [] # List of strings for UI display
         self.available_agvs = sim.Queue("available_agvs")
         self.server_queue = sim.Queue("server_queue")
         self.charger_queue = sim.Queue("charger_queue")
@@ -142,7 +169,8 @@ class SimulationEngine:
         self.order_generator = OrderGenerator(
             order_queue=self.order_queue,
             items=self.items,
-            control_system=self.control_system
+            control_system=self.control_system,
+            live_order_log=self.live_order_log
         )
 
         # 3. Spawn Servers (Packing Stations)
@@ -180,8 +208,8 @@ class SimulationEngine:
                 charger_queues_map={q["node_id"]: q["queue"] for q in self.warehouse.charger_queues},
                 packing_queues_map={q["node_id"]: q["queue"] for q in self.warehouse.packing_queues}
             )
-            # For testing: start with low battery (5%) to trigger charging soon
-            agv.battery = MAX_BATTERY * 0.05
+            # Apply battery factor from config
+            agv.battery = MAX_BATTERY * INITIAL_BATTERY_FACTOR
             self.agvs.append(agv)
 
         self.control_system.agvs = self.agvs # Inject complete fleet reference
