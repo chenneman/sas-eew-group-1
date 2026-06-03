@@ -2,3 +2,5 @@
 # Local scraper logs
 logs/
 !**/__pycache__/
+.env
+gurobi.lic

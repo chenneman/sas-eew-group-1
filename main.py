@@ -1,6 +1,8 @@
 """
 Entry point for the SAS Energy-Aware AGV Simulation.
 """
+from dotenv import load_dotenv
+load_dotenv()
 
 from src.core.simulation import SimulationEngine
 from src.config import SAVE_SUMMARY_TO_FILE, TOTAL_MIN
