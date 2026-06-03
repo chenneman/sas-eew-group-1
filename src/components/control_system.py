@@ -52,428 +52,286 @@ class ControlSystem(sim.Component):
         return self.task_counter
 
     def process(self):
-        # Yieldless state machine: process is called repeatedly upon reactivation
-        if len(self.order_queue) == 0:
-            self.passivate()
-            return
+        while True:
+            # Yieldless state machine: process is called repeatedly upon reactivation
+            if len(self.order_queue) == 0:
+                self.passivate()
+                continue
 
-        # Check if we should wait for more orders (up to batch_size)
-        if len(self.order_queue) < self.batch_size:
-            if self.env.now() - self.last_batch_time < self.max_wait_time:
-                self.hold(1)
-                return
+            # Check if we should wait for more orders (up to batch_size)
+            if len(self.order_queue) < self.batch_size:
+                if self.env.now() - self.last_batch_time < self.max_wait_time:
+                    self.hold(1)
+                    continue
 
-        # Check number of available agvs
-        available_agvs = [
-            agv for agv in self.agvs
-            if agv.status == AGVStatus.IDLE
-        ]
+            # Check number of available agvs
+            available_agvs = [
+                agv for agv in self.agvs
+                if agv.status == AGVStatus.IDLE
+            ]
+            
+            if len(available_agvs) == 0:
+                self.passivate()
+                continue
 
-        if len(available_agvs) == 0:
-            self.passivate()
-            return
+            # Make a batch of the orders that is waiting to be handled
+            batch_orders = list(self.order_queue)[:self.batch_size]
 
-        # Make a batch of the orders that is waiting to be handled
-        batch_orders = list(self.order_queue)[:self.batch_size]
+            # Make tasks based on the routing algorithm
+            tasks = self.routing_algorithm(
+                orders=batch_orders,
+                available_agvs=available_agvs
+            )
 
-        # Make tasks based on the routing algorithm
-        tasks = self.routing_algorithm(
-            orders=batch_orders,
-            available_agvs=available_agvs
-        )
+            # Assign task to agv
+            for task in tasks:
+                agv = task.agv
+                agv.current_task = task
+                agv.route = task.route
+                agv.orders = task.orders
+                agv.status = AGVStatus.MOVING
+                for order in task.orders:
+                    order.status = "ASSIGNED"
+                    self.order_queue.remove(order)
+                agv.activate()
+            self.last_batch_time = self.env.now()
 
-        # Assign task to agv
-        for task in tasks:
-            agv = task.agv
-            agv.current_task = task
-            agv.route = task.route
-            agv.orders = task.orders
-            agv.status = AGVStatus.MOVING
-            for order in task.orders:
-                order.status = "ASSIGNED"
-                order.leave(self.order_queue)
-            agv.activate()
-
-        self.last_batch_time = self.env.now()
-
-        # Hold a tiny amount of time to allow state changes to propagate before next check
-        self.hold(0)
+            # Hold a tiny amount of time to allow state changes to propagate before next check
+            self.hold(0)
 
 
-    def routing_algorithm(self, orders, available_agvs) -> list[Task]:
+    def routing_algorithm(self, orders: list, available_agvs: list) -> list[Task]:
         """
-        Executes the Gurobi optimization model to assign orders to AGVs and determine the optimal route.
+        Executes a Point-of-Interest (POI) based Vehicle Routing Problem (VRP) using Gurobi.
 
-        This translates the mathematical output (flat active edges) into a sequence of actionable
-        `PickupSegment` chunks for the AGV's command-driven navigation.
+        ALGORITHM OVERVIEW:
+        -------------------
+        Instead of modeling every individual grid cell in the warehouse as a potential 
+        node in the optimization (which leads to ~700 nodes and thousands of variables), 
+        this algorithm focuses strictly on the active 'Points of Interest':
+        1.  The current locations of available AGVs.
+        2.  The shelf locations of items in the current order batch.
+        3.  The packing station (dropoff point).
+
+        REASONING:
+        ----------
+        - Performance: Reduces the optimization search space from ~700 nodes to ~5-15 nodes.
+        - Scalability: Fits within restricted Gurobi licenses while solving in milliseconds.
+        - Mathematical Equivalence: Since the optimal path between any two points in the
+          warehouse grid is a shortest-path (A*), we pre-calculate these paths using 
+          NetworkX. The VRP then decides the optimal *sequence* of these POIs to 
+          minimize the objective function (Total Energy = Distance * Mass).
+
+        PROCESS:
+        --------
+        1. Identify POIs: Extract node IDs for AGVs, shelf items, and packing station.
+        2. Build Distance Matrix: Use NetworkX A* to pre-calculate shortest-path weights 
+           between every pair of POIs.
+        3. Formulate MIP: 
+           - Variables: Binary edges (x), assignment (y), load (q), and MTZ sequence (u).
+           - Objective: Minimize sum((E_BASE + ALPHA * load) * distance) for all chosen edges.
+        4. Reconstruct Tasks: Map the optimal POI sequence back to a full grid path and 
+           chunk them into actionable `PickupSegment` objects for the AGV components.
 
         Args:
-            orders (list): A batch of Order objects to be fulfilled.
+            orders (list): A list of Order objects to be fulfilled.
             available_agvs (list): A list of currently idle AGV components.
 
         Returns:
-            list[Task]: A list of newly created Task objects containing structured routes and assignments.
+            list[Task]: A list of newly created Task objects with optimal routes.
         """
-        #As long as there are no orders or no agvs --> return empty (double safety)
         if len(orders) == 0 or len(available_agvs) == 0:
             return []
 
-        # ============================================================
-        # Warehouse graph
-        # ============================================================
+        # 1. Identify Points of Interest (POI)
+        # -----------------------------------
+        packing_node = self.warehouse.packing_station_node_ids[0]
+        
+        # Unique pickup locations
+        pickup_nodes = list(set(order.item.node_id for order in orders))
+        
+        # AGV start locations
+        agv_start_nodes = {agv.agv_id: agv.current_node for agv in available_agvs}
+        
+        # Combine all POIs
+        all_pois = list(set([packing_node] + pickup_nodes + list(agv_start_nodes.values())))
+        poi_to_idx = {node_id: i for i, node_id in enumerate(all_pois)}
+        n_pois = len(all_pois)
+        print(f"Number of POIs: {n_pois}")
 
+        # 2. Build Distance Matrix (Pre-calculate shortest paths)
+        # -------------------------------------------------------
+        import networkx as nx
         G = self.warehouse.routing_graph._graph
+        dist_matrix = {}
+        path_matrix = {}
+        
+        for u in all_pois:
+            for v in all_pois:
+                if u == v:
+                    dist_matrix[u, v] = 0
+                    path_matrix[u, v] = [u]
+                else:
+                    path = nx.astar_path(G, u, v, weight='weight')
+                    dist_matrix[u, v] = nx.path_weight(G, path, weight='weight')
+                    path_matrix[u, v] = path
 
-        N = list(G.nodes)
-        A_undir = list(G.edges)
-
-        A = []
-        distance = {}
-
-        for i, j in A_undir:
-            A.append((i, j))
-            A.append((j, i))
-
-            d = G.edges[i, j]["weight"]
-            distance[i, j] = d
-            distance[j, i] = d
-
-        idle_spot = self.warehouse.idle_spot_node_ids[0]
-        packing_station = self.warehouse.packing_station_node_ids[0]
-
-        # ============================================================
-        # Orders
-        # ============================================================
-        #make set of orders
-        O = [order.order_id for order in orders]
-
-        #order id
-        order_by_id = {
-            order.order_id: order
-            for order in orders
-        }
-        #order weight
-        Ow = {
-            order.order_id: order.item.weight
-            for order in orders
-        }
-        #order volume
-        Ov = {
-            order.order_id: order.item.volume
-            for order in orders
-        }
-        #order location
-        Ol = {
-            order.order_id: order.item.node_id
-            for order in orders
-        }
-
-
-        # ============================================================
-        # AGVs
-        # ============================================================
-
-        #make set of agvs for routing
-        V = [agv.agv_id for agv in available_agvs]
-
-        #agv id
-        agv_by_id = {
-            agv.agv_id: agv
-            for agv in available_agvs
-        }
-
-        #battery level of agvs
-        AGVb = {
-            agv.agv_id: agv.battery
-            for agv in available_agvs
-        }
-
-
-
-        # ============================================================
-        # Parameters
-        # ============================================================
-
-        M = 10000
-        BIG_REWARD = 1000000000
-
-        # ============================================================
-        # Model
-        # ============================================================
-
-        model = gp.Model("AGV_routing")
+        # 3. Formulate VRP in Gurobi
+        # --------------------------
+        model = gp.Model("POI_VRP")
         model.Params.OutputFlag = 0
-        model.Params.NonConvex = 2
 
-        y = model.addVars(O, V, vtype=GRB.BINARY, name="y")                            #order connected to agv
-        x = model.addVars(A, V, vtype=GRB.BINARY, name="x")                            # agv drives over edge
-        u = model.addVars(V, vtype=GRB.BINARY, name="u")                               #agv is being used
-        b = model.addVars(N, V, lb=BATTERY_THRESHOLD, ub=MAX_BATTERY, vtype=GRB.CONTINUOUS, name="b")       #battery level of agv at node
-        q = model.addVars(N, V, lb=0, ub=MAX_PAYLOAD, vtype=GRB.CONTINUOUS, name="q")           # weight of orders on an agv at node
+        V = [agv.agv_id for agv in available_agvs]
+        O = [order.order_id for order in orders]
+        agv_by_id = {agv.agv_id: agv for agv in available_agvs}
+        
+        # Decision Variables
+        # x[i, j, v] = 1 if AGV v travels from POI i to POI j
+        # y[o, v] = 1 if Order o is assigned to AGV v
+        x = model.addVars(all_pois, all_pois, V, vtype=GRB.BINARY, name="x")
+        y = model.addVars(O, V, vtype=GRB.BINARY, name="y")
+        
+        # Load and sequence variables (for MTZ subtour elimination)
+        q = model.addVars(all_pois, V, lb=0, ub=MAX_PAYLOAD, name="q")
+        u = model.addVars(all_pois, V, lb=0, ub=n_pois, name="u")
 
-        pickup_weight = {
-            (n, v): gp.quicksum(
-                Ow[o] * y[o, v]
-                for o in O
-                if Ol[o] == n
-            )
-            for n in N
-            for v in V
-        }
+        # Linearization of quadratic objective (q * x)
+        z = model.addVars(all_pois, all_pois, V, lb=0, name="z")
 
-        # ============================================================
-        # Objective
-        # ============================================================
-
-        #minimize the energy consumption (ALPHA * laod + base) times the distance driven for agvs
+        # Objective: Minimize total energy consumption
         model.setObjective(
             gp.quicksum(
-                (E_BASE + ALPHA * q[i, v]) * distance[i, j] * x[i, j, v]
-                for i, j in A
-                for v in V
-            )- BIG_REWARD * gp.quicksum(y[o, v] for o in O for v in V),
+                dist_matrix[i, j] * (E_BASE * x[i, j, v] + ALPHA * z[i, j, v])
+                for i in all_pois for j in all_pois for v in V if i != j
+            ) - 1e6 * gp.quicksum(y[o, v] for o in O for v in V),
             GRB.MINIMIZE
         )
 
-
-        # ============================================================
         # Constraints
-        # ============================================================
-
-        # Innovation constraint: If False, restrict to max 1 order per AGV (no multi-stop picking)
-        if not INNOVATION_ENABLED:
-            model.addConstrs((
-                gp.quicksum(y[o, v] for o in O) <= 1
-                for v in V),
-                name="max_one_order_per_agv")
+        # -----------
         
-
-        # dont exceed weight capacity of an agv
-        model.addConstrs(
-            (
-                gp.quicksum(Ow[o] * y[o, v] for o in O) <= MAX_PAYLOAD
-                for v in V
-            ),
-            name="weight_capacity"
-        )
-
-        # dont exceed volume capacity of an agv
-        model.addConstrs(
-            (
-                gp.quicksum(Ov[o] * y[o, v] for o in O) <= MAX_VOLUME
-                for v in V
-            ),
-            name="volume_capacity"
-        )
-
-        # if possible all orders handled, otherwise leave in queue but order should be handled not more than 1 time
-        model.addConstrs(
-            (
-                gp.quicksum(y[o, v] for v in V) <= 1
-                for o in O
-            ),
-            name="each_order_at_most_once"
-        )
-
-        # each agv should leave idle spot only once when its used
-        model.addConstrs(
-            (
-                gp.quicksum(x[i, j, v] for i, j in A if i == idle_spot) == u[v]
-                for v in V
-            ),
-            name="leave_idle_spot"
-        )
-
-        # each agv should arrive at packing station once when its used
-        model.addConstrs(
-            (
-                gp.quicksum(x[i, j, v] for i, j in A if j == packing_station) == u[v]
-                for v in V
-            ),
-            name="arrive_packing_station"
-        )
-
-        #when an order is connected to an agv, the agv should be used 
-        model.addConstrs(
-            (
-                y[o, v] <= u[v]
-                for o in O
-                for v in V
-            ),
-            name="order_only_if_agv_used"
-        )
-
-        # if arrive at node also leave node
-        for n in N:
-            if n not in [idle_spot, packing_station]:
+        # Linearization constraints for z[i, j, v] = q[i, v] * x[i, j, v]
+        for i in all_pois:
+            for j in all_pois:
                 for v in V:
-                    model.addConstr(
-                        gp.quicksum(x[i, j, v] for i, j in A if j == n)
-                        ==
-                        gp.quicksum(x[i, j, v] for i, j in A if i == n),
-                        name=f"flow_{n}_{v}"
-                    )
+                    if i != j:
+                        model.addConstr(z[i, j, v] <= MAX_PAYLOAD * x[i, j, v])
+                        model.addConstr(z[i, j, v] <= q[i, v])
+                        model.addConstr(z[i, j, v] >= q[i, v] - MAX_PAYLOAD * (1 - x[i, j, v]))
+        
+        # Each order assigned to at most one AGV
+        model.addConstrs((gp.quicksum(y[o, v] for v in V) <= 1 for o in O), name="order_assignment")
 
-        #when order is assigned, it should visit that shelve
-        for o in O:
-            node = Ol[o]
+        # Simplified VRP Constraints (Standard VRP)
+        for v in V:
+            start_node = agv_start_nodes[v]
+            is_used = model.addVar(vtype=GRB.BINARY, name=f"is_used_{v}")
+            model.addConstr(is_used <= gp.quicksum(y[o, v] for o in O))
+            model.addConstr(is_used >= gp.quicksum(y[o, v] for o in O) / 1000)
 
-            for v in V:
-                model.addConstr(
-                    gp.quicksum(x[i, j, v] for i, j in A if j == node) >= y[o, v],
-                    name=f"visit_order_{o}_{v}"
-                )
+            # 1. Leave start node if used
+            model.addConstr(gp.quicksum(x[start_node, j, v] for j in all_pois if j != start_node) == is_used)
+            
+            # 2. Arrive at packing node if used
+            model.addConstr(gp.quicksum(x[i, packing_node, v] for i in all_pois if i != packing_node) == is_used)
+            
+            # 3. Intermediate nodes flow
+            for p in all_pois:
+                if p != start_node and p != packing_node:
+                    inbound = gp.quicksum(x[i, p, v] for i in all_pois if i != p)
+                    outbound = gp.quicksum(x[p, j, v] for j in all_pois if j != p)
+                    model.addConstr(inbound == outbound)
+                    
+                    # Must visit node if order assigned there
+                    orders_at_p = [o for o in O if orders[O.index(o)].item.node_id == p]
+                    if orders_at_p:
+                        v_p = model.addVar(vtype=GRB.BINARY, name=f"visit_{p}_{v}")
+                        model.addConstr(inbound >= v_p)
+                        for o in orders_at_p:
+                            model.addConstr(v_p >= y[o, v])
 
-        # make the start load = 0
-        model.addConstrs(
-            (
-                q[idle_spot, v] == 0
-                for v in V
-            ),
-            name="start_load"
-        )
+            # 4. Capacity & MTZ for Subtour Elimination
+            model.addConstr(q[start_node, v] == 0)
+            for i in all_pois:
+                for j in all_pois:
+                    if i != j and j != start_node:
+                        # Weight accumulation
+                        orders_at_j = [o for o in O if orders[O.index(o)].item.node_id == j]
+                        weight_at_j = gp.quicksum(orders[O.index(o)].item.weight * y[o, v] for o in orders_at_j) if orders_at_j else 0
+                        model.addConstr(q[j, v] >= q[i, v] + weight_at_j - 1000 * (1 - x[i, j, v]))
+                        # MTZ
+                        model.addConstr(u[j, v] >= u[i, v] + 1 - n_pois * (1 - x[i, j, v]))
 
-        # load flow 
-        model.addConstrs(
-            (
-                q[j, v] >= q[i, v] + pickup_weight[j, v]
-                - MAX_PAYLOAD * (1 - x[i, j, v])
-                for i, j in A
-                for v in V
-            ),
-            name="load_flow_lb"
-        )
+            model.addConstr(gp.quicksum(orders[O.index(o)].item.weight * y[o, v] for o in O) <= MAX_PAYLOAD)
 
-        model.addConstrs(
-            (
-                q[j, v] <= q[i, v] + pickup_weight[j, v]
-                + MAX_PAYLOAD * (1 - x[i, j, v])
-                for i, j in A
-                for v in V
-            ),
-            name="load_flow_ub"
-        )
-
-        #start battery level
-        model.addConstrs(
-            (
-                b[idle_spot, v] == AGVb[v]
-                for v in V
-            ),
-            name="start_battery"
-        )
-
-        # battery flow (These can be turned on if we want to include battery in determination of route but for speed theyre now off)
-        # model.addConstrs(
-        #     (
-        #         b[j, v] <= b[i, v]
-        #         - (E_BASE + ALPHA * q[i, v]) * distance[i, j]
-        #         + M * (1 - x[i, j, v])
-        #         for i, j in A
-        #         for v in V
-        #     ),
-        #     name="battery_flow_ub"
-        # )
-
-        # model.addConstrs(
-        #     (
-        #         b[j, v] >= b[i, v]
-        #         - (E_BASE + ALPHA * q[i, v]) * distance[i, j]
-        #         - M * (1 - x[i, j, v])
-        #         for i, j in A
-        #         for v in V
-        #     ),
-        #     name="battery_flow_lb"
-        # )
-
-        # ============================================================
-        # Solve
-        # ============================================================
-
+        print(f"Gurobi model - Vars: {model.NumVars}, Constrs: {model.NumConstrs}")
         model.optimize()
-
+        
         if model.status != GRB.OPTIMAL:
-            print("No optimal routing solution found.")
             return []
 
-        # ============================================================
-        # Create tasks
-        # ============================================================
-
+        # 4. Reconstruct Tasks
+        # --------------------
         from src.entities.task import Task, PickupSegment
-
         tasks = []
-
+        
         for v in V:
-            assigned_orders = [
-                order_by_id[o]
-                for o in O
-                if y[o, v].X > 0.5
-            ]
-
-            if len(assigned_orders) == 0:
+            assigned_orders = [orders[O.index(o)] for o in O if y[o, v].X > 0.5]
+            if not assigned_orders:
                 continue
-
-            active_edges = [
-                (i, j)
-                for i, j in A
-                if x[i, j, v].X > 0.5
-            ]
-
-            # Trace the exact path planned by Gurobi
-            current_node = idle_spot
-            full_path = [current_node]
-            
-            # Safety against infinite loops if Gurobi outputs a disconnected cycle
-            max_steps = len(N) + 1 
-            steps = 0
-            while current_node != packing_station and steps < max_steps:
-                try:
-                    next_node = next(j for i, j in active_edges if i == current_node)
-                    full_path.append(next_node)
-                    current_node = next_node
-                    steps += 1
-                except StopIteration:
-                    break
-
-            # Group items by their shelf node
-            items_by_node = {}
-            for order in assigned_orders:
-                node = order.item.node_id
-                if node not in items_by_node:
-                    items_by_node[node] = []
-                items_by_node[node].append(order.item)
-
+                
+            # Trace POI path
+            current_poi = agv_start_nodes[v]
+            poi_path = [current_poi]
+            while current_poi != packing_node:
+                next_poi = next(j for j in all_pois if j != current_poi and x[current_poi, j, v].X > 0.5)
+                poi_path.append(next_poi)
+                current_poi = next_poi
+                
+            # Build full grid path and PickupSegments
+            full_grid_path = []
             pickups = []
-            segment_start_idx = 0
             
-            # Chunk the full path into PickupSegments
-            for idx, node in enumerate(full_path):
-                if node in items_by_node:
-                    segment_route = full_path[segment_start_idx : idx + 1]
-                    items_here = items_by_node.pop(node)
-                    
+            for k in range(len(poi_path) - 1):
+                segment_path = path_matrix[poi_path[k], poi_path[k+1]]
+                
+                # If destination POI is a pickup location
+                target_node = poi_path[k+1]
+                items_here = [o.item for o in assigned_orders if o.item.node_id == target_node]
+                
+                if items_here and target_node != packing_node:
+                    # Everything up to target_node is the route for this segment
                     pickups.append(PickupSegment(
-                        route=segment_route,
+                        route=segment_path if not full_grid_path else segment_path,
                         items=items_here,
-                        pick_time=5.0 * len(items_here) # Basic 5s per item
+                        pick_time=5.0 * len(items_here)
                     ))
-                    segment_start_idx = idx
-
-            dropoff_route = full_path[segment_start_idx:]
-
-            selected_agv = agv_by_id[v]
+                
+                if k == 0:
+                    full_grid_path.extend(segment_path)
+                else:
+                    full_grid_path.extend(segment_path[1:])
+                    
+            # Extract dropoff route (from last pickup to packing)
+            if len(poi_path) >= 2:
+                last_pickup_node = poi_path[-2]
+                try:
+                    split_idx = full_grid_path.index(last_pickup_node)
+                    dropoff_route = full_grid_path[split_idx:]
+                except ValueError:
+                    dropoff_route = path_matrix[last_pickup_node, packing_node]
+            else:
+                dropoff_route = [packing_node]
 
             task = Task(
                 task_id=self._generate_task_id(),
                 orders=assigned_orders,
                 pickups=pickups,
                 dropoff_route=dropoff_route,
-                route=full_path, # Keep the flat route for legacy/reference
-                agv=selected_agv,
+                route=full_grid_path,
+                agv=agv_by_id[v],
                 creation_time=self.env.now()
             )
-
             tasks.append(task)
-
+            
         return tasks

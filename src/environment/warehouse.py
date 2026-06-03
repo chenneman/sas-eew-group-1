@@ -62,7 +62,9 @@ class Warehouse:
         self.packing_queues: list[dict] = []
         self.charger_queues: list[dict] = []
 
-        self._animate_layout()
+        # Only animate if an environment is active
+        if sim.default_env():
+            self._animate_layout()
 
     def _animate_layout(self):
         """Draws the static grid and functional zones using sim.AnimateRectangle."""
@@ -80,20 +82,20 @@ class Warehouse:
             if node.type == NodeType.SHELF:
                 color = "saddlebrown"
             elif node.type == NodeType.PACKING:
-                color = "blue"
+                color = "royalblue"
             elif node.type == NodeType.CHARGING:
-                color = "green"
+                color = "forestgreen"
             elif node.type == NodeType.IDLE:
-                color = "gray"
+                color = "dimgray"
             else:
-                color = "white"
+                color = "#2b2b2b" # Dark slate for aisles
                 
             # Draw the cell
             sim.AnimateRectangle(
                 spec=(x0, y0, x1, y1),
                 fillcolor=color,
-                linecolor="black",
-                linewidth=1
+                linecolor=color, # Same as fill for borderless look
+                linewidth=0
             )
 
     def _generate_geometry(

@@ -22,12 +22,12 @@ from src.environment.warehouse import Warehouse
 
 # ── Colour scheme ──────────────────────────────────────────────────────────────
 COLOR = {
-    NodeType.AISLE:    "#AAAAAA",   # grey
-    NodeType.SHELF:    "#8B4513",   # brown
-    NodeType.PACKING:  "#1565C0",   # blue
-    NodeType.CHARGING: "#2E7D32",   # green
-    NodeType.IDLE:     "#66BB6A",   # light-green
-    NodeType.BORDER:   "#FFFFFF",   # white
+    NodeType.AISLE:    "#2b2b2b",   # dark slate
+    NodeType.SHELF:    "saddlebrown",
+    NodeType.PACKING:  "royalblue",
+    NodeType.CHARGING: "forestgreen",
+    NodeType.IDLE:     "dimgray",
+    NodeType.BORDER:   "#1a1a1a",   # near-black
 }
 
 # ── 1. Build layout ────────────────────────────────────────────────────────────

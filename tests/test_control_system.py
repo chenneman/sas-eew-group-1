@@ -27,6 +27,7 @@ class MockWarehouse:
 
         self.idle_spot_node_ids = [1]
         self.packing_station_node_ids = [4]
+        self.shelf_node_ids = [2, 3]
 
         self.location_to_node_id = {
             (1, 0): 2,
@@ -35,13 +36,14 @@ class MockWarehouse:
 
 
 class MockAGV:
-    def __init__(self, agv_id):
+    def __init__(self, agv_id, current_node=1):
         self.agv_id = agv_id
         self.status = AGVStatus.IDLE
-        self.battery = 621.6 # changed soc to battery
+        self.battery = 621.6 
         self.current_task = None
         self.route = None
         self.orders = []
+        self.current_node = current_node
 
 
 def run_test():

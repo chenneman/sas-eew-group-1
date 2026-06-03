@@ -1,3 +1,5 @@
+# TODO adapt test
+
 import salabim as sim
 
 from src.environment.graph import RoutingGraph, Node, NodeType
