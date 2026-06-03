@@ -28,6 +28,7 @@ COLOR = {
     NodeType.CHARGING: "forestgreen",
     NodeType.IDLE:     "dimgray",
     NodeType.BORDER:   "#1a1a1a",   # near-black
+    NodeType.PICK:     "#4b4b4b",   # slightly lighter slate
 }
 
 # ── 1. Build layout ────────────────────────────────────────────────────────────
@@ -48,9 +49,9 @@ type_counts = {nt: len(coords) for nt, coords in by_type.items()}
 total_nodes = G.number_of_nodes()
 total_edges = G.number_of_edges()
 
-# ── 3. Shortest path: random shelf node → nearest packing station ──────────────
+# ── 3. Shortest path: random pick node → nearest packing station ──────────────
 random.seed(42)
-src_node = random.choice(layout.shelf_nodes)
+src_node = random.choice(layout.pick_nodes)
 
 tgt_node = min(
     layout.packing_nodes,
@@ -82,7 +83,7 @@ print(f"  [{'OK' if ok_pack  else 'FAIL'}] len(packing_nodes) == 2          "
 print(f"  [{'OK' if ok_path  else 'FAIL'}] path not None and len > 0        "
       f"(got {len(path_ids) if path_ids else 0})")
 print()
-print(f"  Source (shelf)    : node {src_node.id:>4}  at {src_node.coords}")
+print(f"  Source (pick)     : node {src_node.id:>4}  at {src_node.coords}")
 print(f"  Target (packing)  : node {tgt_node.id:>4}  at {tgt_node.coords}")
 print(f"  Path length       : {len(path_ids)} steps")
 print(SEP)

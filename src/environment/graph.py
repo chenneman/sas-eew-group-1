@@ -18,6 +18,7 @@ class NodeType(Enum):
     IDLE = 4
     AISLE = 5
     BORDER = 6
+    PICK = 7
 
 
 class Node:

@@ -59,11 +59,12 @@ class SimulationEngine:
 
         # Build the warehouse map (pure layout, no item injection)
         self.warehouse = Warehouse()
+        self.warehouse.build_queues(self.env)
 
-        # Sequentially map items to physical shelf nodes (1-to-1)
-        shelf_nodes = self.warehouse.shelf_node_ids
-        for item, shelf_id in zip(self.items, shelf_nodes):
-            item.node_id = shelf_id
+        # Sequentially map items to physical pick nodes (1-to-1)
+        pick_nodes = self.warehouse.pick_node_ids
+        for item, pick_id in zip(self.items, pick_nodes):
+            item.node_id = pick_id
 
         # Initialize math engine
         self.service_time_generator = ServiceTimeGenerator()
@@ -132,7 +133,8 @@ class SimulationEngine:
         self.control_system = ControlSystem(
             warehouse=self.warehouse,
             order_queue=self.order_queue,
-            available_agvs=self.available_agvs
+            available_agvs=self.available_agvs,
+            packing_queues_map={q["node_id"]: q["queue"] for q in self.warehouse.packing_queues}
         )
         self.queue_to_component[self.available_agvs] = self.control_system
         
@@ -145,25 +147,25 @@ class SimulationEngine:
 
         # 3. Spawn Servers (Packing Stations)
         self.servers = []
-        for i in range(1, N_SERVERS + 1):
+        for q_info in self.warehouse.packing_queues:
             server = Server(
-                server_id=i,
-                queue=self.server_queue,
+                server_id=q_info["id"],
+                queue=q_info["queue"],
                 service_time_generator=self.service_time_generator,
             )
             self.servers.append(server)
-        self.queue_to_component[self.server_queue] = self.servers # Mapping to fleet
+            self.queue_to_component[q_info["queue"]] = server
 
         # 4. Spawn Chargers
         self.chargers = []
-        for i in range(1, N_CHARGERS + 1):
+        for q_info in self.warehouse.charger_queues:
             charger = Charger(
-                charger_id=i,
-                queue=self.charger_queue,
+                charger_id=q_info["id"],
+                queue=q_info["queue"],
                 charging_rate=CHARGE_RATE
             )
             self.chargers.append(charger)
-        self.queue_to_component[self.charger_queue] = self.chargers # Mapping to fleet
+            self.queue_to_component[q_info["queue"]] = charger
 
         # 5. Spawn AGVs
         self.agvs = []
@@ -171,10 +173,12 @@ class SimulationEngine:
             agv = AGV(
                 agv_id=i,
                 routing_graph=self.warehouse.routing_graph,
-                server_queue=self.server_queue,
-                charger_queue=self.charger_queue,
+                server_queue=self.server_queue, # Default shared queue for legacy, will be updated to specific
+                charger_queue=self.charger_queue, # Default shared queue for legacy
                 available_agvs=self.available_agvs,
-                queue_to_component=self.queue_to_component
+                queue_to_component=self.queue_to_component,
+                charger_queues_map={q["node_id"]: q["queue"] for q in self.warehouse.charger_queues},
+                packing_queues_map={q["node_id"]: q["queue"] for q in self.warehouse.packing_queues}
             )
             # For testing: start with low battery (5%) to trigger charging soon
             agv.battery = MAX_BATTERY * 0.05

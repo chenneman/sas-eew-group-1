@@ -51,12 +51,14 @@ class Warehouse:
         self.packing_nodes = [n for n in self.all_nodes if n.type == NodeType.PACKING]
         self.charging_nodes = [n for n in self.all_nodes if n.type == NodeType.CHARGING]
         self.idle_nodes = [n for n in self.all_nodes if n.type == NodeType.IDLE]
+        self.pick_nodes = [n for n in self.all_nodes if n.type == NodeType.PICK]
 
         # Extracted lists of IDs for quick access
         self.shelf_node_ids = [n.id for n in self.shelf_nodes]
         self.idle_spot_node_ids = [n.id for n in self.idle_nodes]
         self.packing_station_node_ids = [n.id for n in self.packing_nodes]
         self.charging_station_node_ids = [n.id for n in self.charging_nodes]
+        self.pick_node_ids = [n.id for n in self.pick_nodes]
 
         # Stateful Salabim Queues (populated later by build_queues)
         self.packing_queues: list[dict] = []
@@ -84,9 +86,11 @@ class Warehouse:
             elif node.type == NodeType.PACKING:
                 color = "royalblue"
             elif node.type == NodeType.CHARGING:
-                color = "forestgreen"
+                color = "gold" # Distinct from moving AGVs
             elif node.type == NodeType.IDLE:
                 color = "dimgray"
+            elif node.type == NodeType.PICK:
+                color = "lightgray" # Clearly visible against shelves and aisles
             else:
                 color = "#2b2b2b" # Dark slate for aisles
                 
@@ -103,30 +107,47 @@ class Warehouse:
             length: int, width: int, aisle_width: int, cross_aisle_spacing: int,
             n_shelf_nodes: int, n_packing: int, n_chargers: int
     ) -> tuple[
-        set[int], set[int], set[tuple[int, int]], set[tuple[int, int]], set[tuple[int, int]]]:
+        set[tuple[int, int]], set[tuple[int, int]], set[tuple[int, int]], set[tuple[int, int]], set[tuple[int, int]]]:
         """Calculates coordinate sets for the different functional zones of the warehouse."""
-        # ── Derive bay geometry ───────────────────────────────────────────────
-        n_bays = n_shelf_nodes // (2 * cross_aisle_spacing)
-        shelf_rows = cross_aisle_spacing
-        bay_width = aisle_width + 2
-        total_bay_x = n_bays * bay_width + (n_bays - 1)
-        margin = (length - total_bay_x) // 2
-
-        bay_left_xs = [margin + i * (bay_width + 1) for i in range(n_bays)]
-        shelf_x_set: set[int] = set()
-        for lx in bay_left_xs:
-            shelf_x_set.add(lx)
-            shelf_x_set.add(lx + aisle_width + 1)
-
+        
+        # We want 5 bays. Each bay is 2 blocks wide (back-to-back shelves).
+        # Aisle width is 2.
+        # Total width pattern: [Aisle(2)] [Bay1(2)] [Aisle(2)] [Bay2(2)] ... [Bay5(2)] [Aisle(2)]
+        # Total x space needed = 6 aisles * 2 + 5 bays * 2 = 12 + 10 = 22.
+        # Given L_WH = 28, we center it. Margin = (28 - 22) // 2 = 3.
+        
+        n_bays = 5
+        shelf_w = 2
+        
+        # Calculate Y geometry
+        shelf_rows = 10 # 10 items per column * 10 columns = 100 items
         shelf_y_min = (width - shelf_rows) // 2
         shelf_y_max = shelf_y_min + shelf_rows - 1
-        shelf_y_set = set(range(shelf_y_min, shelf_y_max + 1))
+
+        shelf_coord_set = set()
+        pick_coord_set = set()
+        
+        start_x = 3 + aisle_width # Start after left margin and first aisle
+        
+        for bay in range(n_bays):
+            bay_x_left = start_x + bay * (shelf_w + aisle_width)
+            bay_x_right = bay_x_left + 1
+            
+            for y in range(shelf_y_min, shelf_y_max + 1):
+                # Shelves
+                shelf_coord_set.add((bay_x_left, y))
+                shelf_coord_set.add((bay_x_right, y))
+                
+                # Pick nodes (in aisles adjacent to shelves)
+                pick_coord_set.add((bay_x_left - 1, y)) # Aisle to the left
+                pick_coord_set.add((bay_x_right + 1, y)) # Aisle to the right
 
         packing_y = shelf_y_min - 3
         packing_xs = [int(round(length * (i + 1) / (n_packing + 1))) for i in range(n_packing)]
         packing_coord_set = {(x, packing_y) for x in packing_xs}
 
         charging_y = shelf_y_max + 4
+        margin = 3
         charge_xs = [int(round(x)) for x in np.linspace(margin, length // 2 - margin, n_chargers)]
         charging_coord_set = {(x, charging_y) for x in charge_xs}
 
@@ -134,11 +155,11 @@ class Warehouse:
                    np.linspace(length // 2 + margin, length - margin - 1, n_chargers)]
         idle_coord_set = {(x, charging_y) for x in idle_xs}
 
-        return shelf_x_set, shelf_y_set, packing_coord_set, charging_coord_set, idle_coord_set
+        return shelf_coord_set, pick_coord_set, packing_coord_set, charging_coord_set, idle_coord_set
 
     def _build_graph(
             self, length: int, width: int,
-            shelf_x_set: set[int], shelf_y_set: set[int],
+            shelf_coord_set: set[tuple[int, int]], pick_coord_set: set[tuple[int, int]],
             packing_coord_set: set[tuple[int, int]],
             charging_coord_set: set[tuple[int, int]],
             idle_coord_set: set[tuple[int, int]]
@@ -153,7 +174,7 @@ class Warehouse:
                 coords = (x, y)
                 ntype = self._classify(
                     coords, length, width,
-                    shelf_x_set, shelf_y_set,
+                    shelf_coord_set, pick_coord_set,
                     packing_coord_set, charging_coord_set, idle_coord_set,
                 )
                 node = Node(nid, coords, ntype)
@@ -164,10 +185,20 @@ class Warehouse:
 
         for y in range(width):
             for x in range(length):
+                # Only add edges if BOTH nodes are NOT shelves. (No teleporting through shelves)
+                node_a = all_nodes[coord_to_id[(x, y)]]
+                if node_a.type == NodeType.SHELF:
+                    continue
+                    
                 if x + 1 < length:
-                    self.routing_graph.add_edge(coord_to_id[(x, y)], coord_to_id[(x + 1, y)])
+                    node_b_right = all_nodes[coord_to_id[(x + 1, y)]]
+                    if node_b_right.type != NodeType.SHELF:
+                        self.routing_graph.add_edge(coord_to_id[(x, y)], coord_to_id[(x + 1, y)])
+                
                 if y + 1 < width:
-                    self.routing_graph.add_edge(coord_to_id[(x, y)], coord_to_id[(x, y + 1)])
+                    node_b_up = all_nodes[coord_to_id[(x, y + 1)]]
+                    if node_b_up.type != NodeType.SHELF:
+                        self.routing_graph.add_edge(coord_to_id[(x, y)], coord_to_id[(x, y + 1)])
 
         return all_nodes, coord_to_id
 
@@ -176,8 +207,8 @@ class Warehouse:
             coords: tuple[int, int],
             length: int,
             width: int,
-            shelf_x_set: set[int],
-            shelf_y_set: set[int],
+            shelf_coord_set: set[tuple[int, int]],
+            pick_coord_set: set[tuple[int, int]],
             packing_set: set[tuple[int, int]],
             charging_set: set[tuple[int, int]],
             idle_set: set[tuple[int, int]],
@@ -188,9 +219,11 @@ class Warehouse:
             return NodeType.CHARGING
         if coords in idle_set:
             return NodeType.IDLE
-        x, y = coords
-        if x in shelf_x_set and y in shelf_y_set:
+        if coords in shelf_coord_set:
             return NodeType.SHELF
+        if coords in pick_coord_set:
+            return NodeType.PICK
+        x, y = coords
         if x == 0 or x == length - 1 or y == 0 or y == width - 1:
             return NodeType.BORDER
         return NodeType.AISLE

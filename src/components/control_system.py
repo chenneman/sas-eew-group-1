@@ -26,7 +26,8 @@ class ControlSystem(sim.Component):
         order_queue,
         available_agvs,
         batch_size=BATCH_SIZE,
-        max_wait_time=MAX_WAIT_TIME
+        max_wait_time=MAX_WAIT_TIME,
+        packing_queues_map=None
     ):
         """
         Initializes the ControlSystem component.
@@ -37,12 +38,14 @@ class ControlSystem(sim.Component):
             available_agvs (sim.Queue): The queue containing idle AGVs ready for dispatch.
             batch_size (int): The number of orders to pool before triggering a routing run.
             max_wait_time (float): The maximum time (in sim minutes) to wait for a full batch before triggering.
+            packing_queues_map (dict): Mapping of packing node IDs to their respective Salabim Queues.
         """
         self.warehouse = warehouse
         self.order_queue = order_queue
         self.available_agvs = available_agvs
         self.batch_size = batch_size
         self.max_wait_time = max_wait_time
+        self.packing_queues_map = packing_queues_map or {}
         self.agvs = available_agvs
         self.last_batch_time = 0
         self.task_counter = 0
@@ -145,10 +148,28 @@ class ControlSystem(sim.Component):
 
         # 1. Identify Points of Interest (POI)
         # -----------------------------------
-        packing_node = self.warehouse.packing_station_node_ids[0]
+        # Find the packing node closest to the center of the pickups, penalizing long queues
+        packing_nodes = self.warehouse.packing_station_node_ids
         
         # Unique pickup locations
         pickup_nodes = list(set(order.item.node_id for order in orders))
+        
+        if pickup_nodes:
+            import networkx as nx
+            G_temp = self.warehouse.routing_graph._graph
+            QUEUE_PENALTY = 1000.0 # High penalty ensures empty servers are chosen
+            
+            def score_packing_node(p_node_id):
+                dist = nx.shortest_path_length(G_temp, pickup_nodes[0], p_node_id, weight='weight')
+                q_length = 0
+                if p_node_id in self.packing_queues_map:
+                    q_length = len(self.packing_queues_map[p_node_id])
+                return dist + (q_length * QUEUE_PENALTY)
+                
+            # Select packing node optimizing distance and queue length
+            packing_node = min(packing_nodes, key=score_packing_node)
+        else:
+            packing_node = packing_nodes[0]
         
         # AGV start locations
         agv_start_nodes = {agv.agv_id: agv.current_node for agv in available_agvs}

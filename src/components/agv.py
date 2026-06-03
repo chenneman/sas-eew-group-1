@@ -22,7 +22,7 @@ class AGVStatus(Enum):
 class AGV(sim.Component):
     """ Simulates an AGV navigating the warehouse grid."""
 
-    def setup(self, agv_id: int, routing_graph, server_queue: sim.Queue, charger_queue: sim.Queue, available_agvs: sim.Queue, queue_to_component: dict | None = None) -> None:
+    def setup(self, agv_id: int, routing_graph, server_queue: sim.Queue, charger_queue: sim.Queue, available_agvs: sim.Queue, queue_to_component: dict | None = None, charger_queues_map: dict | None = None, packing_queues_map: dict | None = None) -> None:
         """
         :param agv_id: Unique identifier for the AGV.
         :type agv_id: int
@@ -36,6 +36,10 @@ class AGV(sim.Component):
         :type available_agvs: sim.Queue
         :param queue_to_component: Optional mapping to wake up passive components.
         :type queue_to_component: dict
+        :param charger_queues_map: Optional mapping of node IDs to specific charger queues.
+        :type charger_queues_map: dict
+        :param packing_queues_map: Optional mapping of node IDs to specific server queues.
+        :type packing_queues_map: dict
         """
         self.agv_id = agv_id
         self.routing_graph = routing_graph
@@ -44,6 +48,8 @@ class AGV(sim.Component):
         self.charger_queue = charger_queue
         self.available_agvs = available_agvs
         self.queue_to_component = queue_to_component or {}
+        self.charger_queues_map = charger_queues_map or {}
+        self.packing_queues_map = packing_queues_map or {}
 
         # AGV Parameters
         self.battery = MAX_BATTERY
@@ -70,8 +76,9 @@ class AGV(sim.Component):
         )
         
         # Background for text to make it readable on any surface
+        # Center the rectangle exactly at (x, y-40) with a width of 50 and height of 30
         self.text_bg = sim.AnimateRectangle(
-            spec=(-30, -20, 30, 20),
+            spec=(-25, -15, 25, 15), # Width 50, Height 30, centered at 0,0 locally
             x=self.x,
             y=lambda t: self.y(t) - 40,
             fillcolor=("black", 153) # 153 is 0.6 * 255
@@ -82,7 +89,8 @@ class AGV(sim.Component):
             x=self.x,
             y=lambda t: self.y(t) - 40,
             textcolor="white",
-            fontsize=10
+            fontsize=10,
+            text_anchor="c" # Correct Salabim keyword for centering text
         )
 
     def _wakeup_component(self, queue: sim.Queue):
@@ -135,12 +143,12 @@ class AGV(sim.Component):
 
     def process(self):
         """Main lifecycle loop of the AGV component."""
+        import networkx as nx
 
-        # Find charging node dynamically using underlying nx graph
-        charger_node = next(
-            (n for n, d in self.graph.nodes(data=True) if d.get('type') == NodeType.CHARGING),
-            None
-        )
+        # Find all charging nodes
+        charger_nodes = [
+            n for n, d in self.graph.nodes(data=True) if d.get('type') == NodeType.CHARGING
+        ]
         
         # Find idle nodes
         idle_nodes = [n for n, d in self.graph.nodes(data=True) if d.get('type') == NodeType.IDLE]
@@ -181,8 +189,15 @@ class AGV(sim.Component):
             self.drive_route(self.current_task.dropoff_route)
 
             self.status = AGVStatus.UNLOADING
-            self.enter(self.server_queue)
-            self._wakeup_component(self.server_queue)
+            
+            # Use specific server queue if available based on dropoff route's final node
+            target_server_queue = self.server_queue
+            final_node = self.current_task.dropoff_route[-1]
+            if hasattr(self, 'packing_queues_map') and final_node in self.packing_queues_map:
+                target_server_queue = self.packing_queues_map[final_node]
+
+            self.enter(target_server_queue)
+            self._wakeup_component(target_server_queue)
             self.passivate(mode="UNLOADING")
 
             self.current_task = None
@@ -191,13 +206,33 @@ class AGV(sim.Component):
             self.tasks_completed += 1
 
             if self.battery < BATTERY_THRESHOLD:
-                if charger_node is not None:
-                    print(f"[AGV {self.agv_id}] Low battery ({self.soc:.1f}%). Moving to charger...")
+                if charger_nodes:
+                    # Find the optimal charger: closest distance + penalty for queue length
+                    # High penalty ensures AGVs always pick an empty charger if one exists
+                    QUEUE_PENALTY = 1000.0
+                    
+                    def score_charger(node_id):
+                        dist = nx.shortest_path_length(self.graph, self.current_node, node_id, weight='weight')
+                        q_length = 0
+                        if hasattr(self, 'charger_queues_map') and node_id in self.charger_queues_map:
+                            q_length = len(self.charger_queues_map[node_id])
+                        return dist + (q_length * QUEUE_PENALTY)
+
+                    charger_node = min(charger_nodes, key=score_charger)
+                    
+                    # Use specific queue if available, fallback to shared
+                    target_queue = self.charger_queue
+                    if hasattr(self, 'charger_queues_map') and charger_node in self.charger_queues_map:
+                        target_queue = self.charger_queues_map[charger_node]
+                        
+                    self.enter(target_queue) # Enter queue immediately to reserve spot and update length
+                    
+                    print(f"[AGV {self.agv_id}] Low battery ({self.soc:.1f}%). Moving to charger {charger_node}...")
                     self.status = AGVStatus.CHARGING
                     self.drive_route(
                         self.routing_graph.get_shortest_path(self.current_node, charger_node))
-                    self.enter(self.charger_queue)
-                    self._wakeup_component(self.charger_queue)
+                        
+                    self._wakeup_component(target_queue) # Wakeup the specific charger
                     self.passivate(mode="CHARGING")
                     print(f"[AGV {self.agv_id}] Charging complete. Battery: {self.soc:.1f}%.")
                 else:
