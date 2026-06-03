@@ -7,6 +7,7 @@ import salabim as sim
 
 from src.config import L_WH, W_WH, N_SERVERS, N_CHARGERS, N_ITEMS
 from src.environment.graph import Node, NodeType, RoutingGraph
+from src.utils.animation import grid_to_pixel, ANIMATION_SCALE
 
 
 class Warehouse:
@@ -65,10 +66,15 @@ class Warehouse:
 
     def _animate_layout(self):
         """Draws the static grid and functional zones using sim.AnimateRectangle."""
-        scale = 30 # pixels per grid unit
         
         for node in self.all_nodes:
-            x, y = node.coords
+            x_raw, y_raw = node.coords
+            
+            # Calculate pixel bounds
+            x0 = x_raw * ANIMATION_SCALE
+            y0 = y_raw * ANIMATION_SCALE
+            x1 = x0 + ANIMATION_SCALE
+            y1 = y0 + ANIMATION_SCALE
             
             # Determine color based on node type
             if node.type == NodeType.SHELF:
@@ -84,7 +90,7 @@ class Warehouse:
                 
             # Draw the cell
             sim.AnimateRectangle(
-                spec=(x * scale, y * scale, (x + 1) * scale, (y + 1) * scale),
+                spec=(x0, y0, x1, y1),
                 fillcolor=color,
                 linecolor="black",
                 linewidth=1

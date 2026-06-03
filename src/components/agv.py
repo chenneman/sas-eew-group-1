@@ -7,6 +7,7 @@ from enum import Enum
 
 from src.environment.graph import NodeType
 from src.config import MAX_BATTERY, BATTERY_THRESHOLD, DRIVE_SPEED, E_BASE, ALPHA
+from src.utils.animation import grid_to_pixel
 
 
 class AGVStatus(Enum):
@@ -81,18 +82,18 @@ class AGV(sim.Component):
     def x(self, t: float) -> float:
         """Calculates interpolated X coordinate for animation."""
         if self.mode() == "MOVING":
-            x_start = self.graph.nodes[self.current_node]['pos'][0]
-            x_end = self.graph.nodes[self.next_node]['pos'][0]
+            x_start = grid_to_pixel(self.graph.nodes[self.current_node]['pos'][0])
+            x_end = grid_to_pixel(self.graph.nodes[self.next_node]['pos'][0])
             return sim.interpolate(t, self.mode_time(), self.scheduled_time(), x_start, x_end)
-        return self.graph.nodes[self.current_node]['pos'][0]
+        return grid_to_pixel(self.graph.nodes[self.current_node]['pos'][0])
 
     def y(self, t: float) -> float:
         """Calculates interpolated Y coordinate for animation."""
         if self.mode() == "MOVING":
-            y_start = self.graph.nodes[self.current_node]['pos'][1]
-            y_end = self.graph.nodes[self.next_node]['pos'][1]
+            y_start = grid_to_pixel(self.graph.nodes[self.current_node]['pos'][1])
+            y_end = grid_to_pixel(self.graph.nodes[self.next_node]['pos'][1])
             return sim.interpolate(t, self.mode_time(), self.scheduled_time(), y_start, y_end)
-        return self.graph.nodes[self.current_node]['pos'][1]
+        return grid_to_pixel(self.graph.nodes[self.current_node]['pos'][1])
 
     def color(self, t: float) -> str:
         """Determines animation color based on AGV status."""
