@@ -5,7 +5,7 @@
 # Warehouse parameters
 L_WH       = 28             # Warehouse grid length in x (meters)
 W_WH       = 24             # Warehouse grid width in y (meters)
-N_AGV      = 4              # Number of AGVs
+N_AGV      = 2              # Number of AGVs
 N_SERVERS  = 2              # Number of servers
 N_CHARGERS = N_AGV          # Number of chargers
 N_ITEMS    = 100            # Number of items
@@ -19,10 +19,9 @@ ORDERS_PER_HOUR = [
 ]
 
 # Control Parameters
-INNOVATION_ENABLED = True  # True = Multi-stop picking, False = 1 order per AGV
-N_REPS         = 10
-MAX_WAIT_TIME = 5 # min
-BATCH_SIZE = 3 # orders
+INNOVATION_ENABLED = False  # True = Multi-stop picking, False = 1 order per AGV
+MAX_WAIT_TIME = 5 # maximum time (in sim minutes) to wait for a full batch before triggering.
+BATCH_SIZE = 5 # the number of orders to pool before triggering a routing run.
 
 # Time parameters
 SIM_START_HOUR = 0
@@ -34,7 +33,7 @@ TOTAL_MIN      = WARMUP_MIN + HORIZON_MIN
 ANIMATE = False # If False much faster
 INITIAL_ANIM_SPEED = 3      # Initial animation speed (e.g., 1 for synced)
 INITIAL_BATTERY_FACTOR = 0.15 # Fraction of MAX_BATTERY to start with (e.g. 0.05 for testing)
-LOG_TRACE_TO_FILE = True  # If True, saves Salabim trace to logs/trace.log
+LOG_TRACE_TO_FILE = False  # If True, saves Salabim trace to logs/trace.log
 SAVE_SUMMARY_TO_FILE = True # If True, saves the final KPI summary to logs/summary.txt
 RANDOM_SEED = 123           # Seed for reproducible simulation runs
 
