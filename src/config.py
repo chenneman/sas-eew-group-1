@@ -31,18 +31,20 @@ HORIZON_MIN    = 24 * 60
 TOTAL_MIN      = WARMUP_MIN + HORIZON_MIN
 
 # Simulation parameters
-ANIMATE = True # If False much faster
+ANIMATE = False # If False much faster
 INITIAL_ANIM_SPEED = 3      # Initial animation speed (e.g., 1 for synced)
 INITIAL_BATTERY_FACTOR = 0.15 # Fraction of MAX_BATTERY to start with (e.g. 0.05 for testing)
-LOG_TRACE_TO_FILE = False  # If True, saves Salabim trace to logs/trace.log
+LOG_TRACE_TO_FILE = True  # If True, saves Salabim trace to logs/trace.log
 SAVE_SUMMARY_TO_FILE = True # If True, saves the final KPI summary to logs/summary.txt
+RANDOM_SEED = 123           # Seed for reproducible simulation runs
+
 
 # AGV parameters
 MAX_BATTERY    = 621.6 # Wh
 SOC_THRESHOLD   = 10 # %
 BATTERY_THRESHOLD  = 0.01 * SOC_THRESHOLD * MAX_BATTERY
 DRIVE_SPEED   = 3.5 # m/s
-E_BASE        = 0.1 #0.0489 # Wh/m
+E_BASE        = 0.1 # originally 0.0489 # Wh/m
 ALPHA       = 0.0001 # Wh/(kg·m)
 MAX_VOLUME = 60 * 40 * 40 # cm^3
 MAX_PAYLOAD = 40.0 # kg
