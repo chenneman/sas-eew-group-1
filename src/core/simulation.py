@@ -28,7 +28,9 @@ from src.config import (
     MAX_BATTERY,
     INITIAL_ANIM_SPEED,
     INITIAL_BATTERY_FACTOR,
-    LOG_TRACE_TO_FILE
+    LOG_TRACE_TO_FILE,
+    RANDOM_SEED,
+    ANIMATE
 )
 
 from src.utils.paths import LOGS_DIR
@@ -38,21 +40,27 @@ from src.core.metrics import SimulationMetrics
 class SimulationEngine:
     """
     Wraps the Salabim environment and initializes all required simulation entities.
+    Supports the context manager pattern for robust log file handling.
     """
 
-    def __init__(self, trace: bool = False, animate: bool = False):
-        self.env = sim.Environment(trace=trace)
-        self.animate = animate
+    def __init__(self, animate: bool = None):
+        self.animate = animate if animate is not None else ANIMATE
         self.metrics = SimulationMetrics()
-        
+        self._trace_file = None
+        self.env = None
+
+    def __enter__(self):
+        """Initializes the simulation environment and logs."""
         if LOG_TRACE_TO_FILE:
-            self.env.trace(True)
-            # Route salabim trace to file
-            self._trace_file = open("logs/trace.log", "w")
-            self.env.trace(out=self._trace_file)
+            if not LOGS_DIR.exists():
+                LOGS_DIR.mkdir(parents=True, exist_ok=True)
+            self._trace_file = open(LOGS_DIR / "trace.log", "w")
+            self.env = sim.Environment(trace=self._trace_file, random_seed=RANDOM_SEED)
+        else:
+            self.env = sim.Environment(trace=False, random_seed=RANDOM_SEED)
 
         if self.animate:
-            self.env.animation_parameters(animate=True, speed=INITIAL_ANIM_SPEED, width=1200, height=800)
+            self.env.animation_parameters(animate=True, speed=INITIAL_ANIM_SPEED, width=1920, height=1080)
             self.env.background_color("black")
 
         self._build_world()
@@ -61,6 +69,13 @@ class SimulationEngine:
         
         if self.animate:
             self._build_ui()
+            
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Ensures log files are properly closed."""
+        if self._trace_file:
+            self._trace_file.close()
 
     def _build_world(self):
         """Initializes the static warehouse layout and math engines."""
@@ -81,9 +96,9 @@ class SimulationEngine:
 
     def _build_ui(self):
         """Creates the on-screen UI overlay for real-time metrics."""
-        # Background for the metrics box (Top Right)
+        # Background for the metrics box (Top Right, shifted left by 90px)
         sim.AnimateRectangle(
-            spec=(950, 650, 1180, 780),
+            spec=(860, 650, 1090, 780),
             fillcolor="black",
             linecolor="white",
             linewidth=2,
@@ -93,7 +108,7 @@ class SimulationEngine:
         # Simulation Time
         sim.AnimateText(
             text=lambda t: f"Time: {self.env.now():.1f} min",
-            x=970, y=750,
+            x=880, y=750,
             textcolor="white", fontsize=18
         )
         
@@ -104,20 +119,20 @@ class SimulationEngine:
             
         sim.AnimateText(
             text=get_completed_count,
-            x=970, y=720,
+            x=880, y=720,
             textcolor="cyan", fontsize=16
         )
         
         # Pending Orders
         sim.AnimateText(
             text=lambda t: f"Pending: {len(self.order_queue)}",
-            x=970, y=690,
+            x=880, y=690,
             textcolor="yellow", fontsize=16
         )
         
-        # Live Order Log Background (Right side)
+        # Live Order Log Background (Right side, shifted left by 90px)
         sim.AnimateRectangle(
-            spec=(950, 50, 1180, 600),
+            spec=(860, 50, 1090, 600),
             fillcolor="#111111",
             linecolor="gray",
             linewidth=1,
@@ -126,7 +141,7 @@ class SimulationEngine:
         
         sim.AnimateText(
             text="Live Orders",
-            x=960, y=575,
+            x=870, y=575,
             textcolor="lightgreen", fontsize=14
         )
         
@@ -137,7 +152,7 @@ class SimulationEngine:
             
         sim.AnimateText(
             text=get_log_text,
-            x=960, y=550,
+            x=870, y=550,
             textcolor="lightgray", fontsize=10,
             text_anchor="nw"
         )

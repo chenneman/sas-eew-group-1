@@ -2,8 +2,12 @@
 Utility module for aggregating simulation metrics and KPIs.
 """
 
+from datetime import datetime
+
 from dataclasses import dataclass, field
 import numpy as np
+
+from src.utils.paths import LOGS_DIR
 
 @dataclass
 class SimulationMetrics:
@@ -42,8 +46,6 @@ class SimulationMetrics:
         print(output)
         
         if save_to_file:
-            import os
-            if not os.path.exists("logs"):
-                os.makedirs("logs")
-            with open("logs/summary.txt", "w") as f:
+            logfile = f"{LOGS_DIR}/summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+            with open(logfile, "w") as f:
                 f.write(output)
