@@ -122,7 +122,8 @@ class AGV(sim.Component):
         if self.mode() == "MOVING":
             x_start = grid_to_pixel(self.graph.nodes[self.current_node]['pos'][0])
             x_end = grid_to_pixel(self.graph.nodes[self.next_node]['pos'][0])
-            return sim.interpolate(t, self.mode_time(), self.scheduled_time(), x_start, x_end)
+            hop_start = getattr(self, "hop_start_time", self.mode_time())
+            return sim.interpolate(t, hop_start, self.scheduled_time(), x_start, x_end)
         return grid_to_pixel(self.graph.nodes[self.current_node]['pos'][0])
 
     def y(self, t: float) -> float:
@@ -130,7 +131,8 @@ class AGV(sim.Component):
         if self.mode() == "MOVING":
             y_start = grid_to_pixel(self.graph.nodes[self.current_node]['pos'][1])
             y_end = grid_to_pixel(self.graph.nodes[self.next_node]['pos'][1])
-            return sim.interpolate(t, self.mode_time(), self.scheduled_time(), y_start, y_end)
+            hop_start = getattr(self, "hop_start_time", self.mode_time())
+            return sim.interpolate(t, hop_start, self.scheduled_time(), y_start, y_end)
         return grid_to_pixel(self.graph.nodes[self.current_node]['pos'][1])
 
     def color(self, t: float) -> str:
@@ -164,25 +166,40 @@ class AGV(sim.Component):
         idle_nodes = [n for n, d in self.graph.nodes(data=True) if d.get('type') == NodeType.IDLE]
 
         while True:
+            # 1. Announce availability for immediate task assignment
             self.status = AGVStatus.IDLE
             self.enter(self.available_agvs)
             self._wakeup_component(self.available_agvs)
             
-            # If not at an idle node, move to one
-            if self.current_node not in idle_nodes and idle_nodes:
-                # Pick an idle node (ideally one that matches agv_id to avoid overlap)
-                target_idle = idle_nodes[(self.agv_id - 1) % len(idle_nodes)]
-                path = self.routing_graph.get_shortest_path(self.current_node, target_idle)
-                self.status = AGVStatus.MOVING
-                self.drive_route(path)
+            # Yield momentarily so ControlSystem can process and potentially assign a task right now
+            self.hold(0, mode="IDLE")
+            
+            # 2. Check if a task was assigned immediately
+            if self.current_task is None:
+                # No immediate task. We must drive to an idle node to wait.
+                if self in self.available_agvs:
+                    self.leave(self.available_agvs) # Crucial: Don't accept tasks while driving to idle
+                
+                if self.current_node not in idle_nodes and idle_nodes:
+                    # Pick an idle node (ideally one that matches agv_id to avoid overlap)
+                    target_idle = idle_nodes[(self.agv_id - 1) % len(idle_nodes)]
+                    path = self.routing_graph.get_shortest_path(self.current_node, target_idle)
+                    self.status = AGVStatus.MOVING
+                    self.drive_route(path)
+                
+                # 3. Arrived at idle node. Wait for task.
                 self.status = AGVStatus.IDLE
+                self.enter(self.available_agvs)
+                self._wakeup_component(self.available_agvs)
+                
+                while self.current_task is None:
+                    self.passivate(mode="IDLE")
             
-            while self.current_task is None:
-                self.passivate(mode="IDLE")
-            
+            # Ensure we leave the queue once a task is assigned
             if self in self.available_agvs:
                 self.leave(self.available_agvs)
 
+            # --- Execute Task ---
             for pickup in self.current_task.pickups:
                 self.status = AGVStatus.MOVING
                 self.drive_route(pickup.route)
@@ -264,6 +281,7 @@ class AGV(sim.Component):
             # dist [m] / speed [m/s] = time [s] -> convert to [min]
             travel_time = (dist / DRIVE_SPEED) / 60.0
 
+            self.hop_start_time = self.env.now()
             self.hold(travel_time, mode="MOVING")
 
             energy_used = (E_BASE + (ALPHA * self.payload_mass)) * dist

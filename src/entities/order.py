@@ -16,7 +16,7 @@ class Order:
     order_id: int
     item: Item
     arrival_min: float
-    status: str = "GEN"
+    status: str = "PENDING"
     assignment_min: float | None = None
     completion_min: float | None = None
 
