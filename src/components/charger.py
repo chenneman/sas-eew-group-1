@@ -1,9 +1,12 @@
 """Charging-station component for AGVs."""
 
 import salabim as sim
+import logging
 
 from src.components.agv import AGVStatus
 from src.config import CHARGE_RATE, MAX_BATTERY
+
+logger = logging.getLogger(__name__)
 
 
 class Charger(sim.Component):
@@ -38,6 +41,8 @@ class Charger(sim.Component):
                 self.current_agv.leave(self.queue)
                 self.current_agv.status = AGVStatus.CHARGING
                 
+                logger.debug(f"[Charger {self.charger_id}] Starting charge for AGV {self.current_agv.agv_id} ({self.current_agv.soc:.1f}%)")
+                
                 charging_time = self.time_to_full(self.current_agv)
                 
                 if charging_time > 0:
@@ -51,19 +56,16 @@ class Charger(sim.Component):
                     
             elif self.state == "CHARGING" or self.state == "FINISHING":
                 # Charging complete. 
-                # The AGV should be full. Set it here, but ideally the AGV
-                # manages its own battery during the hold. Ensure it's full.
+                logger.info(f"[Charger {self.charger_id}] Finished charging AGV {self.current_agv.agv_id if self.current_agv else 'unknown'}")
+                # The AGV should be full. Ensure it's full.
                 self.current_agv.battery = MAX_BATTERY
                 self.current_agv.status = AGVStatus.IDLE
                 
-                # Note: NO LONGER route the AGV here. The AGV (or ControlSystem)
-                # is responsible for deciding where to go after charging.
                 self.current_agv.activate()
                 
                 self.current_agv = None
                 self.state = "IDLE"
                 
-                # Loop back immediately to check for the next AGV
                 self.hold(0)
                 continue
 

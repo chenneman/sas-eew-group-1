@@ -37,7 +37,12 @@ from src.config import (
 
 from src.utils.paths import LOGS_DIR
 
+import logging
+
+# ... existing imports ...
 from src.core.metrics import SimulationMetrics
+
+logger = logging.getLogger(__name__)
 
 class WarmupManager(sim.Component):
     """Component that waits for the warmup period and then resets component metrics."""
@@ -47,7 +52,7 @@ class WarmupManager(sim.Component):
 
     def process(self):
         self.hold(self.warmup_time)
-        print(f"\n--- Warmup Period ({self.warmup_time} min) Finished. Resetting Metrics... ---")
+        logger.info(f"--- Warmup Period ({self.warmup_time} min) Finished. Resetting Metrics... ---")
         
         # Manually reset relevant monitors for KPI tracking
         for agv in self.engine.agvs:

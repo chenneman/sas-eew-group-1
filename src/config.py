@@ -14,24 +14,27 @@ N_ITEMS    = 100            # Number of items
 # Control Parameters
 INNOVATION_ENABLED = True  # True = Multi-stop picking, False = 1 order per AGV
 MAX_WAIT_TIME = 5 # maximum time (in sim minutes) to wait for a full batch before triggering.
-BATCH_SIZE = 5 # the number of orders to pool before triggering a routing run.
+BATCH_SIZE = 3 # the number of orders to pool before triggering a routing run.
 
 # Scaling Multipliers
-ORDER_RATE_MULTIPLIER = 10.0 # Multiplies orders/hr rate (e.g., 2.0 doubles demand)
+ORDER_RATE_MULTIPLIER = 5.0 # Multiplies orders/hr rate (e.g., 2.0 doubles demand)
 SERVICE_TIME_MULTIPLIER = 2.0 # Multiplies unloading/packing time (e.g., 2.0 makes it 2x slower)
 
 # Time parameters
 SIM_START_HOUR = 0
 WARMUP_MIN     = 30
-HORIZON_MIN    = 24 * 60
+HORIZON_MIN    = 1 * 60
 TOTAL_MIN      = WARMUP_MIN + HORIZON_MIN
 
 # Simulation parameters
-ANIMATE = True # If False much faster
+ANIMATE = False # If False much faster
 INITIAL_ANIM_SPEED = 1      # Initial animation speed (e.g., 1 for synced)
 INITIAL_BATTERY_FACTOR = 0.15 # Fraction of MAX_BATTERY to start with (e.g. 0.05 for testing)
-LOG_TRACE_TO_FILE = False  # If True, saves Salabim trace to logs/trace.log
-SAVE_SUMMARY_TO_FILE = True # If True, saves the final KPI summary to logs/summary.txt
+# Logging parameters
+LOG_LEVEL = "INFO"             # DEBUG, INFO, WARNING, ERROR, CRITICAL
+SAVE_LOG_TO_FILE = True       # If True, saves custom logs to logs/simulation.log
+LOG_TRACE_TO_FILE = False      # If True, saves Salabim trace to logs/trace.log
+SAVE_SUMMARY_TO_FILE = True    # If True, saves the final KPI summary to logs/summary.txt
 RANDOM_SEED = 1234           # Seed for reproducible simulation runs
 
 

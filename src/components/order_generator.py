@@ -2,6 +2,9 @@
 
 import random
 import salabim as sim
+import logging
+
+logger = logging.getLogger(__name__)
 
 from src.config import SIM_START_HOUR, ORDER_RATE_MULTIPLIER
 from src.entities.order import Order
@@ -68,6 +71,7 @@ class OrderGenerator(sim.Component):
                 item=item,
                 arrival_min=self.env.now()
             )
+            logger.info(f"[OrderGenerator] New Order #{order.order_id} generated: {item.name[:20]} ({item.weight}kg)")
             
             if self.live_order_log is not None:
                 # Store the raw Order object directly for UI reactivity

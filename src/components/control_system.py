@@ -14,6 +14,10 @@ from src.config import (BATCH_SIZE, MAX_WAIT_TIME, MAX_BATTERY, MAX_VOLUME, MAX_
                         BATTERY_THRESHOLD, E_BASE, ALPHA, INNOVATION_ENABLED, PICK_TIME_PER_ITEM)
 
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 # TODO refactor spaghetti to more functions, add typehints
 class ControlSystem(sim.Component):
     """
@@ -75,10 +79,13 @@ class ControlSystem(sim.Component):
                 # If we haven't reached the timeout yet, wait until the timeout or until interrupted
                 if time_since_last < self.max_wait_time:
                     wait_remaining = self.max_wait_time - time_since_last
+                    logger.debug(f"[ControlSystem] Waiting for more orders. {len(self.order_queue)}/{self.batch_size} in queue. Timeout in {wait_remaining:.1f} min.")
                     # Salabim's hold can be interrupted by .activate() from OrderGenerator or AGVs
                     self.hold(wait_remaining)
                     # After waking up, re-evaluate conditions (queue might have filled or timeout hit)
                     continue
+                else:
+                    logger.info(f"[ControlSystem] Batch timeout reached ({self.max_wait_time} min). Processing {len(self.order_queue)} orders.")
 
             # 4. Execute Routing Logic
             # Make a larger batch proportional to the number of available AGVs
@@ -86,14 +93,19 @@ class ControlSystem(sim.Component):
             max_batch_to_check = num_available * self.batch_size
             batch_orders = list(self.order_queue)[:max_batch_to_check]
 
+            logger.info(f"[ControlSystem] Triggering routing for {len(batch_orders)} orders with {num_available} AGVs.")
             tasks = self.routing_algorithm(
                 orders=batch_orders,
                 available_agvs=available_agvs
             )
 
             # 5. Assign tasks
+            if not tasks:
+                logger.warning("[ControlSystem] Routing algorithm returned no tasks.")
+            
             for task in tasks:
                 agv = task.agv
+                logger.info(f"[ControlSystem] Assigned Task {task.task_id} to AGV {agv.agv_id} ({len(task.orders)} orders)")
                 if agv in self.available_agvs:
                     agv.leave(self.available_agvs)
                 

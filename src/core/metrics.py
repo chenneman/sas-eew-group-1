@@ -2,11 +2,14 @@
 Utility module for aggregating simulation metrics and KPIs.
 """
 
+import logging
 from datetime import datetime
 from dataclasses import dataclass, field
 import numpy as np
 
 from src.utils.paths import LOGS_DIR
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class SimulationMetrics:
@@ -97,7 +100,7 @@ class SimulationMetrics:
         lines.append("==================================================\n")
         
         output = "\n".join(lines)
-        print(output)
+        logger.info(output)
         
         if save_to_file:
             logfile = f"{LOGS_DIR}/summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"

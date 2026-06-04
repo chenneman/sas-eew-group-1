@@ -4,11 +4,13 @@ AGV simulation component and state models.
 
 import salabim as sim
 from enum import Enum
+import logging
 
 from src.environment.graph import NodeType
 from src.config import MAX_BATTERY, BATTERY_THRESHOLD, DRIVE_SPEED, E_BASE, ALPHA
 from src.utils.animation import grid_to_pixel
 
+logger = logging.getLogger(__name__)
 
 class AGVStatus(Enum):
     """Possible AGV states."""
@@ -194,6 +196,7 @@ class AGV(sim.Component):
                 self.leave(self.available_agvs)
 
             # --- Execute Task ---
+            logger.debug(f"[AGV {self.agv_id}] Executing task with {len(self.current_task.pickups)} pickups")
             for pickup in self.current_task.pickups:
                 self.status = AGVStatus.MOVING
                 self.drive_route(pickup.route)
@@ -246,17 +249,17 @@ class AGV(sim.Component):
                         
                     self.enter(target_queue) # Enter queue immediately to reserve spot and update length
                     
-                    print(f"[AGV {self.agv_id}] Low battery ({self.soc:.1f}%). Moving to charger {charger_node}...")
+                    logger.info(f"[AGV {self.agv_id}] Low battery ({self.soc:.1f}%). Moving to charger {charger_node}...")
                     self.status = AGVStatus.CHARGING
                     self.drive_route(
                         self.routing_graph.get_shortest_path(self.current_node, charger_node))
                         
                     self._wakeup_component(target_queue) # Wakeup the specific charger
                     self.passivate(mode="CHARGING")
-                    print(f"[AGV {self.agv_id}] Charging complete. Battery: {self.soc:.1f}%.")
+                    logger.info(f"[AGV {self.agv_id}] Charging complete. Battery: {self.soc:.1f}%.")
                 else:
                     # Fallback or warning if no charger found
-                    print(f"Warning: AGV {self.agv_id} low battery but no charger found in graph.")
+                    logger.error(f"Warning: AGV {self.agv_id} low battery but no charger found in graph.")
 
 
 
@@ -267,6 +270,7 @@ class AGV(sim.Component):
         :param route_node_ids: List of sequential node IDs representing the path.
         :type route_node_ids: list[int]
         """
+        logger.debug(f"[AGV {self.agv_id}] Driving route: {route_node_ids}")
         for i in range(len(route_node_ids) - 1):
             self.current_node = route_node_ids[i]
             self.next_node = route_node_ids[i + 1]

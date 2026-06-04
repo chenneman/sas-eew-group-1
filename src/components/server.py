@@ -1,10 +1,13 @@
 """Packing-area server component for processing AGV deliveries."""
 
 import salabim as sim
+import logging
 
 from src.components.agv import AGVStatus
 from src.environment.service_time_generator import ServiceTimeGenerator
 from src.config import SERVICE_TIME_MULTIPLIER
+
+logger = logging.getLogger(__name__)
 
 
 class Server(sim.Component):
@@ -44,6 +47,8 @@ class Server(sim.Component):
                 self.state = "UNLOADING"
                 self.current_agv = self.queue.pop()
                 self.current_task = self.current_agv.current_task
+                
+                logger.debug(f"[Server {self.server_id}] Starting unloading AGV {self.current_agv.agv_id}")
                 
                 if not self.current_task:
                     # Invalid state, clean up and reset
@@ -90,6 +95,7 @@ class Server(sim.Component):
             elif self.state == "PACKING" or self.state == "FINISHING":
                 # Job is completely done
                 if self.current_task:
+                    logger.info(f"[Server {self.server_id}] Finished processing {len(self.current_task.orders)} orders from AGV {self.current_agv.agv_id if self.current_agv else 'unknown'}")
                     for order in self.current_task.orders:
                         order.status = "COMPLETED"
                         order.completion_time = self.env.now()
