@@ -2,20 +2,20 @@
 
 from __future__ import annotations
 
-import numpy as np
 import salabim as sim
 
 from src.config import L_WH, W_WH, N_SERVERS, N_CHARGERS, N_ITEMS
 from src.environment.graph import Node, NodeType, RoutingGraph
-from src.utils.animation import grid_to_pixel, ANIMATION_SCALE
+from src.utils.animation import ANIMATION_SCALE
 
 
 class Warehouse:
-    """Warehouse layout built on top of RoutingGraph.
+    """
+    Constructs and manages the physical layout of the picker-to-parts warehouse.
     
-    This is a pure environment generator. It defines the physical nodes
-    (shelves, aisles, packing stations, chargers, idle spots) and their connectivity.
-    It does NOT manage inventory or Items.
+    The warehouse is modeled as a grid of nodes connected by edges, with specialized
+    locations for shelves, packing stations, charging docks, and AGV idle spots.
+    This class is a pure environment generator and does not manage inventory.
     """
 
     def __init__(
@@ -28,7 +28,18 @@ class Warehouse:
             n_packing: int = N_SERVERS,
             n_chargers: int = N_CHARGERS,
     ) -> None:
-
+        """
+        Initializes the warehouse dimensions and triggers the geometric generation.
+        
+        Args:
+            length: Total length in the X direction (meters).
+            width: Total width in the Y direction (meters).
+            aisle_width: Space between shelving bays (meters).
+            cross_aisle_spacing: Unused legacy parameter for vertical spacing.
+            n_shelf_nodes: Total number of shelving units to generate.
+            n_packing: Number of packing stations.
+            n_chargers: Number of charging docks.
+        """
         # 1. Generate geometry sets
         (
             shelf_x_set, shelf_y_set,
@@ -53,7 +64,7 @@ class Warehouse:
         self.idle_nodes = [n for n in self.all_nodes if n.type == NodeType.IDLE]
         self.pick_nodes = [n for n in self.all_nodes if n.type == NodeType.PICK]
 
-        # Extracted lists of IDs for quick access
+        # Extracted lists of IDs for quick access in components
         self.shelf_node_ids = [n.id for n in self.shelf_nodes]
         self.idle_spot_node_ids = [n.id for n in self.idle_nodes]
         self.packing_station_node_ids = [n.id for n in self.packing_nodes]
@@ -68,46 +79,37 @@ class Warehouse:
         if sim.default_env():
             self._animate_layout()
 
-    def _animate_layout(self):
+    def _animate_layout(self) -> None:
         """Draws the static grid and functional zones using sim.AnimateRectangle."""
-        
         for node in self.all_nodes:
             x_raw, y_raw = node.coords
             
-            # Calculate pixel bounds
             x0 = x_raw * ANIMATION_SCALE
             y0 = y_raw * ANIMATION_SCALE
             x1 = x0 + ANIMATION_SCALE
             y1 = y0 + ANIMATION_SCALE
             
-            # Determine color based on node type
             if node.type == NodeType.SHELF:
                 color = "saddlebrown"
             elif node.type == NodeType.PACKING:
                 color = "royalblue"
             elif node.type == NodeType.CHARGING:
-                color = "gold" # Distinct from moving AGVs
+                color = "gold"
             elif node.type == NodeType.IDLE:
                 color = "dimgray"
             elif node.type == NodeType.PICK:
-                color = "lightgray" # Clearly visible against shelves and aisles
+                color = "lightgray"
             else:
-                color = "#2b2b2b" # Dark slate for aisles
+                color = "#2b2b2b"
                 
-            # Draw the cell
             sim.AnimateRectangle(
                 spec=(x0, y0, x1, y1),
                 fillcolor=color,
-                linecolor=color, # Same as fill for borderless look
+                linecolor=color,
                 linewidth=0
             )
 
-            if node.type == NodeType.PACKING:
-                # Need to find the server ID or just generic packing label
-                # Since we don't have the exact ID here, we just use the index later.
-                pass
-                
-        # Add labels for packing and charging nodes
+        # Add labels
         for i, node in enumerate(self.packing_nodes):
             x_raw, y_raw = node.coords
             x0 = x_raw * ANIMATION_SCALE
@@ -138,41 +140,29 @@ class Warehouse:
             self,
             length: int, width: int, aisle_width: int, cross_aisle_spacing: int,
             n_shelf_nodes: int, n_packing: int, n_chargers: int
-    ) -> tuple[
-        set[tuple[int, int]], set[tuple[int, int]], set[tuple[int, int]], set[tuple[int, int]], set[tuple[int, int]]]:
+    ) -> tuple[set[tuple[int, int]], set[tuple[int, int]], set[tuple[int, int]], set[tuple[int, int]], set[tuple[int, int]]]:
         """Calculates coordinate sets for the different functional zones of the warehouse."""
-        
-        # We want 5 bays. Each bay is 2 blocks wide (back-to-back shelves).
-        # Aisle width is 2.
-        # Total width pattern: [Aisle(2)] [Bay1(2)] [Aisle(2)] [Bay2(2)] ... [Bay5(2)] [Aisle(2)]
-        # Total x space needed = 6 aisles * 2 + 5 bays * 2 = 12 + 10 = 22.
-        # Given L_WH = 28, we center it. Margin = (28 - 22) // 2 = 3.
-        
         n_bays = 5
         shelf_w = 2
         
-        # Calculate Y geometry
-        shelf_rows = 10 # 10 items per column * 10 columns = 100 items
+        shelf_rows = 10
         shelf_y_min = (width - shelf_rows) // 2
         shelf_y_max = shelf_y_min + shelf_rows - 1
 
-        shelf_coord_set = set()
-        pick_coord_set = set()
+        shelf_coord_set: set[tuple[int, int]] = set()
+        pick_coord_set: set[tuple[int, int]] = set()
         
-        start_x = 3 + aisle_width # Start after left margin and first aisle
+        start_x = 3 + aisle_width
         
         for bay in range(n_bays):
             bay_x_left = start_x + bay * (shelf_w + aisle_width)
             bay_x_right = bay_x_left + 1
             
             for y in range(shelf_y_min, shelf_y_max + 1):
-                # Shelves
                 shelf_coord_set.add((bay_x_left, y))
                 shelf_coord_set.add((bay_x_right, y))
-                
-                # Pick nodes (in aisles adjacent to shelves)
-                pick_coord_set.add((bay_x_left - 1, y)) # Aisle to the left
-                pick_coord_set.add((bay_x_right + 1, y)) # Aisle to the right
+                pick_coord_set.add((bay_x_left - 1, y))
+                pick_coord_set.add((bay_x_right + 1, y))
 
         packing_y = shelf_y_min - 3
         packing_xs = [int(round(length * (i + 1) / (n_packing + 1))) for i in range(n_packing)]
@@ -180,11 +170,11 @@ class Warehouse:
 
         charging_y = shelf_y_max + 4
         margin = 3
-        charge_xs = [int(round(x)) for x in np.linspace(margin, length // 2 - margin, n_chargers)]
+        # Use simple list comprehension instead of numpy for linear spacing to keep it lightweight
+        charge_xs = [int(round(margin + i * (length // 2 - 2 * margin) / max(1, n_chargers - 1))) for i in range(n_chargers)]
         charging_coord_set = {(x, charging_y) for x in charge_xs}
 
-        idle_xs = [int(round(x)) for x in
-                   np.linspace(length // 2 + margin, length - margin - 1, n_chargers)]
+        idle_xs = [int(round(length // 2 + margin + i * (length // 2 - 2 * margin - 1) / max(1, n_chargers - 1))) for i in range(n_chargers)]
         idle_coord_set = {(x, charging_y) for x in idle_xs}
 
         return shelf_coord_set, pick_coord_set, packing_coord_set, charging_coord_set, idle_coord_set
@@ -217,7 +207,6 @@ class Warehouse:
 
         for y in range(width):
             for x in range(length):
-                # Only add edges if BOTH nodes are NOT shelves. (No teleporting through shelves)
                 node_a = all_nodes[coord_to_id[(x, y)]]
                 if node_a.type == NodeType.SHELF:
                     continue
@@ -245,6 +234,7 @@ class Warehouse:
             charging_set: set[tuple[int, int]],
             idle_set: set[tuple[int, int]],
     ) -> NodeType:
+        """Maps a coordinate to a specific functional NodeType."""
         if coords in packing_set:
             return NodeType.PACKING
         if coords in charging_set:
@@ -260,11 +250,15 @@ class Warehouse:
             return NodeType.BORDER
         return NodeType.AISLE
 
-    def build_queues(self, env: sim.Environment):
-        """Initializes salabim Queues for packing and charging stations.
+    def build_queues(self, env: sim.Environment) -> Warehouse:
+        """
+        Initializes salabim Queues for packing and charging stations.
         
-        This separates the static geometric generation from the stateful
-        simulation component initialization.
+        Args:
+            env: The active Salabim environment.
+            
+        Returns:
+            The warehouse instance for method chaining.
         """
         self.packing_queues = [
             {"id": i + 1, "node_id": n.id,
