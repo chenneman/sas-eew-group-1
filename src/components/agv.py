@@ -7,7 +7,8 @@ from enum import Enum
 import logging
 
 from src.environment.graph import NodeType
-from src.config import MAX_BATTERY, BATTERY_THRESHOLD, DRIVE_SPEED, E_BASE, ALPHA
+from src.config import MAX_BATTERY, BATTERY_THRESHOLD, DRIVE_SPEED, E_BASE, E_IDLE, ALPHA
+
 from src.utils.animation import grid_to_pixel
 
 logger = logging.getLogger(__name__)
@@ -149,6 +150,13 @@ class AGV(sim.Component):
         self.items_loaded = 0
         self.tasks_completed += 1
 
+    def _apply_idle_drain(self, duration: float):
+        """Calculates and subtracts energy consumed while stationary."""
+        energy_used = E_IDLE * duration
+        self.battery -= energy_used
+        self.total_energy_consumed += energy_used
+        self.soc_monitor.tally(self.soc)
+
     def process(self):
         """Main lifecycle loop of the AGV component."""
         import networkx as nx
@@ -189,7 +197,9 @@ class AGV(sim.Component):
                 self._wakeup_component(self.available_agvs)
                 
                 while self.current_task is None:
+                    wait_start = self.env.now()
                     self.passivate(mode="IDLE")
+                    self._apply_idle_drain(self.env.now() - wait_start)
             
             # Ensure we leave the queue once a task is assigned
             if self in self.available_agvs:
@@ -203,6 +213,7 @@ class AGV(sim.Component):
 
                 self.status = AGVStatus.LOADING
                 self.hold(pickup.pick_time, mode="LOADING")
+                self._apply_idle_drain(pickup.pick_time)
                 
                 # Dynamically accumulate mass and items
                 for item in pickup.items:
@@ -224,7 +235,10 @@ class AGV(sim.Component):
 
             self.enter(target_server_queue)
             self._wakeup_component(target_server_queue)
+            
+            wait_start = self.env.now()
             self.passivate(mode="UNLOADING")
+            self._apply_idle_drain(self.env.now() - wait_start)
 
             if self.battery < BATTERY_THRESHOLD:
                 if charger_nodes:

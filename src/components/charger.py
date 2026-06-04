@@ -70,9 +70,9 @@ class Charger(sim.Component):
                 continue
 
     def best_charged_agv(self):
-        """Select the AGV with the highest battery percentage from the charger queue."""
+        """Select the AGV with the lowest battery percentage from the charger queue."""
         # Use the agv.soc property (0 to 100) directly for comparison
-        return max(list(self.queue), key=lambda agv: agv.soc)
+        return min(list(self.queue), key=lambda agv: agv.soc)
 
     def time_to_full(self, agv) -> float:
         missing_charge = max(0.0, MAX_BATTERY - agv.battery)

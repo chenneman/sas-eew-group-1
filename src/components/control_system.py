@@ -84,20 +84,21 @@ class ControlSystem(sim.Component):
             if len(self.order_queue) < self.batch_size:
                 time_since_last = self.env.now() - self.last_batch_time
                 
-                if time_since_last < self.max_wait_time:
+                # Use a small epsilon to avoid floating point precision loops
+                if time_since_last < self.max_wait_time - 1e-7:
                     wait_remaining = self.max_wait_time - time_since_last
-                    logger.debug(f"[ControlSystem] Waiting for more orders. {len(self.order_queue)}/{self.batch_size} in queue. Timeout in {wait_remaining:.1f} min.")
+                    logger.debug(f"[{self.env.now():.2f}] [ControlSystem] Waiting for more orders. {len(self.order_queue)}/{self.batch_size} in queue. Timeout in {wait_remaining:.3f} min.")
                     self.hold(wait_remaining)
                     continue
                 else:
-                    logger.info(f"[ControlSystem] Batch timeout reached ({self.max_wait_time} min). Processing {len(self.order_queue)} orders.")
+                    logger.info(f"[{self.env.now():.2f}] [ControlSystem] Batch timeout reached ({self.max_wait_time} min). Processing {len(self.order_queue)} orders.")
 
             # 4. Execute Routing Logic
             num_available = len(available_agvs)
             max_batch_to_check = num_available * self.batch_size
             batch_orders = list(self.order_queue)[:max_batch_to_check]
 
-            logger.info(f"[ControlSystem] Triggering routing for {len(batch_orders)} orders with {num_available} AGVs.")
+            logger.info(f"[{self.env.now():.2f}] [ControlSystem] Triggering routing for {len(batch_orders)} orders with {num_available} AGVs.")
             tasks = self.routing_algorithm(
                 orders=batch_orders,
                 available_agvs=available_agvs
@@ -200,6 +201,8 @@ class ControlSystem(sim.Component):
         """Formulates and solves the MIP model using Gurobi."""
         model = gp.Model("POI_VRP")
         model.Params.OutputFlag = 0
+        model.Params.TimeLimit = 15.0  # Seconds
+        model.Params.MIPGap = 0.05    # 5% optimality gap for speed
 
         V = [agv.agv_id for agv in available_agvs]
         O = [order.order_id for order in orders]
@@ -213,11 +216,12 @@ class ControlSystem(sim.Component):
         z = model.addVars(all_pois, all_pois, V, lb=0, name="z")
 
         # Objective: Minimize energy consumption (Distance * (Base + Alpha * Load))
+        # Penalty for unfulfilled orders (1e4 is large enough to prioritize fulfillment over distance)
         model.setObjective(
             gp.quicksum(
                 dist_matrix[i, j] * (E_BASE * x[i, j, v] + ALPHA * z[i, j, v])
                 for i in all_pois for j in all_pois for v in V if i != j
-            ) - 1e6 * gp.quicksum(y[o, v] for o in O for v in V),
+            ) - 1e4 * gp.quicksum(y[o, v] for o in O for v in V),
             GRB.MINIMIZE
         )
 
@@ -244,7 +248,7 @@ class ControlSystem(sim.Component):
             start_node = agv_start_nodes[v]
             is_used = model.addVar(vtype=GRB.BINARY, name=f"is_used_{v}")
             model.addConstr(is_used <= gp.quicksum(y[o, v] for o in O))
-            model.addConstr(is_used >= gp.quicksum(y[o, v] for o in O) / 1000)
+            model.addConstr(is_used >= gp.quicksum(y[o, v] for o in O) / max(1, len(O)))
 
             model.addConstr(gp.quicksum(x[start_node, j, v] for j in all_pois if j != start_node) == is_used)
             model.addConstr(gp.quicksum(x[i, packing_node, v] for i in all_pois if i != packing_node) == is_used)
@@ -269,13 +273,24 @@ class ControlSystem(sim.Component):
                     if i != j and j != start_node:
                         orders_at_j = [o for o in O if orders[O.index(o)].item.node_id == j]
                         weight_at_j = gp.quicksum(orders[O.index(o)].item.weight * y[o, v] for o in orders_at_j) if orders_at_j else 0
-                        model.addConstr(q[j, v] >= q[i, v] + weight_at_j - 1000 * (1 - x[i, j, v]))
+                        model.addConstr(q[j, v] >= q[i, v] + weight_at_j - MAX_PAYLOAD * (1 - x[i, j, v]))
                         model.addConstr(u[j, v] >= u[i, v] + 1 - n_pois * (1 - x[i, j, v]))
 
         model.optimize()
         
         if model.status != GRB.OPTIMAL:
-            return None
+            if model.status == GRB.TIME_LIMIT:
+                logger.warning(f"[{self.env.now():.2f}] [ControlSystem] Gurobi hit time limit. Status: {model.status}")
+                if model.SolCount > 0:
+                    logger.info("Using best found sub-optimal solution.")
+                else:
+                    return None
+            elif model.status == GRB.INFEASIBLE:
+                logger.error(f"[{self.env.now():.2f}] [ControlSystem] Gurobi model is INFEASIBLE.")
+                return None
+            else:
+                logger.warning(f"[{self.env.now():.2f}] [ControlSystem] Gurobi ended with status {model.status}")
+                return None
 
         # Return relevant results for reconstruction
         return {
@@ -305,14 +320,24 @@ class ControlSystem(sim.Component):
             # Trace POI path
             current_poi = solution['agv_start_nodes'][v]
             poi_path = [current_poi]
-            while current_poi != packing_node:
+            
+            # Safety break to prevent infinite loops during reconstruction
+            max_steps = len(all_pois) + 1
+            steps = 0
+            
+            while current_poi != packing_node and steps < max_steps:
+                steps += 1
                 try:
                     next_poi = next(j for j in all_pois if j != current_poi and x_vals[current_poi, j, v] > 0.5)
                     poi_path.append(next_poi)
                     current_poi = next_poi
                 except StopIteration:
-                    logger.error(f"[ControlSystem] Failed to reconstruct path for AGV {v}")
+                    logger.error(f"[ControlSystem] Failed to find next POI for AGV {v} at node {current_poi}")
                     break
+            
+            if steps >= max_steps:
+                logger.error(f"[ControlSystem] Path reconstruction exceeded max steps for AGV {v}. Subtour detected?")
+                continue
                 
             # Build full grid path and PickupSegments
             full_grid_path: list[int] = []

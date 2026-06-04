@@ -23,7 +23,6 @@ class Warehouse:
             length: int = L_WH,
             width: int = W_WH,
             aisle_width: int = 2,
-            cross_aisle_spacing: int = 10,
             n_shelf_nodes: int = N_ITEMS,
             n_packing: int = N_SERVERS,
             n_chargers: int = N_CHARGERS,
@@ -35,7 +34,6 @@ class Warehouse:
             length: Total length in the X direction (meters).
             width: Total width in the Y direction (meters).
             aisle_width: Space between shelving bays (meters).
-            cross_aisle_spacing: Unused legacy parameter for vertical spacing.
             n_shelf_nodes: Total number of shelving units to generate.
             n_packing: Number of packing stations.
             n_chargers: Number of charging docks.
@@ -45,7 +43,7 @@ class Warehouse:
             shelf_x_set, shelf_y_set,
             packing_coord_set, charging_coord_set, idle_coord_set
         ) = self._generate_geometry(
-            length, width, aisle_width, cross_aisle_spacing,
+            length, width, aisle_width,
             n_shelf_nodes, n_packing, n_chargers
         )
 
@@ -138,7 +136,7 @@ class Warehouse:
 
     def _generate_geometry(
             self,
-            length: int, width: int, aisle_width: int, cross_aisle_spacing: int,
+            length: int, width: int, aisle_width: int,
             n_shelf_nodes: int, n_packing: int, n_chargers: int
     ) -> tuple[set[tuple[int, int]], set[tuple[int, int]], set[tuple[int, int]], set[tuple[int, int]], set[tuple[int, int]]]:
         """Calculates coordinate sets for the different functional zones of the warehouse."""

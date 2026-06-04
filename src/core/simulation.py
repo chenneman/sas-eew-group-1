@@ -32,6 +32,7 @@ from src.config import (
     LOG_TRACE_TO_FILE,
     RANDOM_SEED,
     ANIMATE,
+    ENABLE_UI_LOGGING,
     SIM_START_HOUR,
     WARMUP_MIN,
     LOG_LEVEL
@@ -93,8 +94,8 @@ class SimulationEngine:
         self._instantiate_queues()
         self._boot_components()
 
-        # 2. Setup UI Log Mirroring (only if animating)
-        if self.animate:
+        # 2. Setup UI Log Mirroring (only if animating and enabled)
+        if self.animate and ENABLE_UI_LOGGING:
             # Create a simple formatter for UI (no colors, no complex date)
             ui_fmt = logging.Formatter("%(levelname)-5s %(message)s")
             self.ui_log_handler = UILogHandler(self.live_event_log, max_lines=25)
