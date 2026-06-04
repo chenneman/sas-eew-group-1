@@ -70,22 +70,8 @@ class OrderGenerator(sim.Component):
             )
             
             if self.live_order_log is not None:
-                # Store order reference to update status later
-                log_entry = {
-                    "order_id": order.order_id,
-                    "time": self.env.now(),
-                    "item_name": item.name[:10],
-                    "weight": item.weight,
-                    "status": "GEN"
-                }
-                
-                def format_log(e):
-                    return f"[{e['time']:5.1f}] #{e['order_id']} {e['item_name']} {e['weight']}kg | {e['status']}"
-                
-                # We'll just append the formatted string for now, but allow external updates via shared list
-                self.live_order_log.append(format_log(log_entry))
-                # Store the entry for potential updates (though list of strings is simpler for Salabim)
-                # Let's stick to strings but make them more descriptive.
+                # Store the raw Order object directly for UI reactivity
+                self.live_order_log.append(order)
             
             # 3. Store and emit
             self.orders.append(order)

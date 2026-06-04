@@ -1,16 +1,9 @@
 """Order data model."""
 
-from enum import Enum
 from dataclasses import dataclass
 
 from src.entities.item import Item
 from src.config import SIM_START_HOUR
-
-class OrderStatus(Enum):
-    """Lifecycle states of a customer order."""
-    PENDING = "PENDING"     # Waiting in the central queue
-    ASSIGNED = "ASSIGNED"   # Routed and assigned to a specific AGV
-    COMPLETED = "COMPLETED" # Picked, delivered, and packed by the server
 
 @dataclass
 class Order:
@@ -23,7 +16,7 @@ class Order:
     order_id: int
     item: Item
     arrival_min: float
-    status: OrderStatus = OrderStatus.PENDING
+    status: str = "GEN"
     assignment_min: float | None = None
     completion_min: float | None = None
 
@@ -38,4 +31,4 @@ class Order:
 
     def __repr__(self) -> str:
         return (f"Order#{self.order_id:04d}  ts={self.timestamp}"
-                f"  status={self.status.value}  item={self.item.sku}")
+                f"  status={self.status}  item={self.item.sku}")

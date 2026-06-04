@@ -119,110 +119,125 @@ class SimulationEngine:
         self.service_time_generator = ServiceTimeGenerator()
 
     def _build_ui(self):
-        """Creates the on-screen UI overlay for real-time metrics."""
-        # Background for the metrics box (Top Right, expanded to fit all text)
+        """Creates the on-screen UI overlay for real-time metrics and telemetry."""
+        # 1. KPI Panel (Top Left of the UI area)
         sim.AnimateRectangle(
-            spec=(860, 620, 1140, 780),
-            fillcolor="black",
+            spec=(860, 700, 1200, 950),
+            fillcolor="#1a1a1a",
             linecolor="white",
             linewidth=2,
             arg="UI"
         )
         
-        # Real-world Clock (HH:MM)
+        # Clock
         def get_clock_time(t):
             total_mins = self.env.now() + (SIM_START_HOUR * 60)
             hrs = int((total_mins // 60) % 24)
             mins = int(total_mins % 60)
             return f"{hrs:02d}:{mins:02d}"
 
-        sim.AnimateText(
-            text=get_clock_time,
-            x=880, y=760,
-            textcolor="lightgray", fontsize=14,
-            text_anchor="nw"
-        )
-
-        # Simulation Time (Cumulative)
-        sim.AnimateText(
-            text=lambda t: f"Sim Time: {self.env.now():.1f} min",
-            x=880, y=740,
-            textcolor="white", fontsize=16,
-            text_anchor="nw"
-        )
+        sim.AnimateText(text=get_clock_time, x=880, y=920, textcolor="lightgray", fontsize=16, text_anchor="nw")
         
-        # Orders Completed
+        sim.AnimateText(text=lambda t: f"Sim Time: {self.env.now():.1f} min", x=880, y=890, textcolor="white", fontsize=18, text_anchor="nw")
+        
         def get_completed_count(t):
-            count = sum(len(server.processed_orders) for server in self.servers)
-            return f"Completed: {count}"
-            
-        sim.AnimateText(
-            text=get_completed_count,
-            x=880, y=710,
-            textcolor="cyan", fontsize=16,
-            text_anchor="nw"
-        )
+            return f"Completed: {sum(len(s.processed_orders) for s in self.servers)}"
+        sim.AnimateText(text=get_completed_count, x=880, y=850, textcolor="cyan", fontsize=18, text_anchor="nw")
         
-        # Pending Orders
-        sim.AnimateText(
-            text=lambda t: f"Pending: {len(self.order_queue)}",
-            x=880, y=680,
-            textcolor="yellow", fontsize=16,
-            text_anchor="nw"
-        )
+        sim.AnimateText(text=lambda t: f"Pending: {len(self.order_queue)}", x=880, y=810, textcolor="yellow", fontsize=18, text_anchor="nw")
         
-        # In-Progress Orders (Assigned but not yet completed)
         def get_in_progress(t):
-            total_gen = self.order_generator.orders_generated
-            fulfilled = sum(len(server.processed_orders) for server in self.servers)
-            pending = len(self.order_queue)
-            return f"In-Progress: {total_gen - fulfilled - pending}"
-            
-        sim.AnimateText(
-            text=get_in_progress,
-            x=880, y=650,
-            textcolor="orange", fontsize=15,
-            text_anchor="nw"
-        )
+            return f"In-Progress: {self.order_generator.orders_generated - sum(len(s.processed_orders) for s in self.servers) - len(self.order_queue)}"
+        sim.AnimateText(text=get_in_progress, x=880, y=770, textcolor="orange", fontsize=18, text_anchor="nw")
         
-        # Active AGVs
         def get_active_agvs(t):
-            active = sum(1 for agv in self.agvs if agv.status != AGVStatus.IDLE)
-            return f"Active AGVs: {active}/{len(self.agvs)}"
-            
-        sim.AnimateText(
-            text=get_active_agvs,
-            x=880, y=625,
-            textcolor="white", fontsize=14,
-            text_anchor="nw"
-        )
-        
-        # Live Order Log Background (Right side)
+            return f"Active AGVs: {sum(1 for a in self.agvs if a.status != AGVStatus.IDLE)}/{len(self.agvs)}"
+        sim.AnimateText(text=get_active_agvs, x=880, y=730, textcolor="white", fontsize=16, text_anchor="nw")
+
+        # Throughput Tracker
+        def get_throughput(t):
+            hr = self.env.now() / 60
+            comp = sum(len(s.processed_orders) for s in self.servers)
+            tp = comp / hr if hr > 0 else 0
+            return f"Throughput: {tp:.1f} /hr"
+        sim.AnimateText(text=get_throughput, x=1050, y=850, textcolor="magenta", fontsize=18, text_anchor="nw")
+
+        # 2. Reactive Live Order Log (Bottom Left of the UI area)
         sim.AnimateRectangle(
-            spec=(860, 50, 1140, 600),
+            spec=(860, 50, 1200, 680),
             fillcolor="#111111",
             linecolor="gray",
             linewidth=1,
             arg="UI"
         )
+        sim.AnimateText(text="Reactive Live Orders Status", x=870, y=650, textcolor="lightgreen", fontsize=16, text_anchor="nw")
+
+        # Multiple AnimateText loops for colors
+        for i in range(25):
+            def log_text(t, idx=i):
+                if idx < len(self.live_order_log):
+                    o = self.live_order_log[-(idx+1)]
+                    return f"[{o.arrival_min:5.1f}] #{o.order_id} {o.item.name[:10]} {o.item.weight}kg | {o.status}"
+                return ""
+                
+            def log_color(t, idx=i):
+                if idx < len(self.live_order_log):
+                    s = self.live_order_log[-(idx+1)].status
+                    if s == "GEN": return "white"
+                    if s == "ASSIGNED": return "orange"
+                    if s == "COMPLETED": return "lightgreen"
+                return "gray"
+                
+            y_pos = 620 - (i * 20)
+            sim.AnimateText(
+                text=lambda t, idx=i: log_text(t, idx),
+                x=870, y=y_pos,
+                textcolor=lambda t, idx=i: log_color(t, idx),
+                fontsize=11,
+                text_anchor="nw"
+            )
+
+        # 3. AGV Telemetry Panels (Right of the UI area)
+        start_x = 1220
+        start_y = 950
+        box_w = 300
+        box_h = 200
+        padding = 20
         
-        sim.AnimateText(
-            text="Live Orders Status",
-            x=870, y=575,
-            textcolor="lightgreen", fontsize=14
-        )
-        
-        # Function to render the last 25 lines of the order log
-        def get_log_text(t):
-            lines = self.live_order_log[-25:]
-            return "\n".join(lines)
+        for idx, agv in enumerate(self.agvs):
+            bx = start_x + (idx % 2) * (box_w + padding)
+            by = start_y - (idx // 2) * (box_h + padding)
             
-        sim.AnimateText(
-            text=get_log_text,
-            x=870, y=550,
-            textcolor="lightgray", fontsize=9, # Reduced slightly to fit status
-            text_anchor="nw"
-        )
+            sim.AnimateRectangle(
+                spec=(bx, by - box_h, bx + box_w, by),
+                fillcolor="#222222",
+                linecolor="cyan",
+                linewidth=2,
+                arg="UI"
+            )
+            sim.AnimateText(text=f"AGV {agv.agv_id} Telemetry", x=bx+10, y=by-20, textcolor="cyan", fontsize=16, text_anchor="nw")
+            
+            def agv_soc(t, a=agv): return f"Battery: {a.soc:.1f}%"
+            sim.AnimateText(text=lambda t, a=agv: agv_soc(t, a), x=bx+10, y=by-50, textcolor="yellow", fontsize=14, text_anchor="nw")
+            
+            def agv_stat(t, a=agv): return f"Status: {a.status.name if hasattr(a.status, 'name') else a.status}"
+            sim.AnimateText(text=lambda t, a=agv: agv_stat(t, a), x=bx+10, y=by-75, textcolor="white", fontsize=14, text_anchor="nw")
+            
+            def agv_load(t, a=agv): 
+                mass = a.payload_mass if hasattr(a, 'payload_mass') else 0.0
+                items = a.items_loaded if hasattr(a, 'items_loaded') else 0
+                return f"Load: {mass:.1f}kg ({items} items)"
+            sim.AnimateText(text=lambda t, a=agv: agv_load(t, a), x=bx+10, y=by-100, textcolor="lightgray", fontsize=14, text_anchor="nw")
+            
+            def agv_orders(t, a=agv):
+                if not hasattr(a, 'orders') or not a.orders: return "Assigned: None"
+                return f"Assigned: {','.join(str(o.order_id) for o in a.orders)}"
+            sim.AnimateText(text=lambda t, a=agv: agv_orders(t, a), x=bx+10, y=by-125, textcolor="orange", fontsize=12, text_anchor="nw")
+            
+            def agv_energy(t, a=agv): 
+                energy = a.total_energy if hasattr(a, 'total_energy') else 0.0
+                return f"Energy: {energy:.1f} Wh"
+            sim.AnimateText(text=lambda t, a=agv: agv_energy(t, a), x=bx+10, y=by-150, textcolor="white", fontsize=12, text_anchor="nw")
 
     def _instantiate_queues(self):
         """Creates the central communication queues and component mappings."""
