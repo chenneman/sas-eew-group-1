@@ -56,43 +56,44 @@ class ControlSystem(sim.Component):
 
     def process(self):
         while True:
-            # Yieldless state machine: process is called repeatedly upon reactivation
+            # 1. Wait for orders if queue is empty
             if len(self.order_queue) == 0:
                 self.passivate()
                 continue
 
-            # Check number of available agvs (those waiting in the queue)
+            # 2. Wait for AGVs if none are available
             available_agvs = list(self.available_agvs)
-            
             if len(available_agvs) == 0:
                 self.passivate()
                 continue
 
-            # Check if we should wait for more orders (up to batch_size)
+            # 3. Handle Batching Logic
+            # Check if we have enough orders for a full batch
             if len(self.order_queue) < self.batch_size:
-                # If we have orders and have waited enough, proceed. Else wait.
-                if len(self.order_queue) > 0 and (self.env.now() - self.last_batch_time >= self.max_wait_time):
-                    pass 
-                else:
-                    self.hold(1)
+                time_since_last = self.env.now() - self.last_batch_time
+                
+                # If we haven't reached the timeout yet, wait until the timeout or until interrupted
+                if time_since_last < self.max_wait_time:
+                    wait_remaining = self.max_wait_time - time_since_last
+                    # Salabim's hold can be interrupted by .activate() from OrderGenerator or AGVs
+                    self.hold(wait_remaining)
+                    # After waking up, re-evaluate conditions (queue might have filled or timeout hit)
                     continue
 
+            # 4. Execute Routing Logic
             # Make a larger batch proportional to the number of available AGVs
             num_available = len(available_agvs)
             max_batch_to_check = num_available * self.batch_size
             batch_orders = list(self.order_queue)[:max_batch_to_check]
 
-            # Make tasks based on the routing algorithm
             tasks = self.routing_algorithm(
                 orders=batch_orders,
                 available_agvs=available_agvs
             )
 
-            # Assign task to agv
+            # 5. Assign tasks
             for task in tasks:
                 agv = task.agv
-                
-                # Critical: Remove from queue immediately so other loops don't see it
                 if agv in self.available_agvs:
                     agv.leave(self.available_agvs)
                 
@@ -103,15 +104,11 @@ class ControlSystem(sim.Component):
                 for order in task.orders:
                     order.status = "ASSIGNED"
                     order.assignment_min = self.env.now()
-                    # Update live log status if present
-                    if hasattr(self.warehouse, 'live_order_log'): # Wait, it's on generator usually.
-                        pass # Generator owns the log list. 
-                    
                     self.order_queue.remove(order)
                 agv.activate()
-            self.last_batch_time = self.env.now()
 
-            # Hold a tiny amount of time to allow state changes to propagate before next check
+            self.last_batch_time = self.env.now()
+            # Minimal hold to allow state propagation
             self.hold(0)
 
 

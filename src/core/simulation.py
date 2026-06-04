@@ -142,7 +142,7 @@ class SimulationEngine:
         
         def get_completed_count(t):
             return f"Completed: {sum(len(s.processed_orders) for s in self.servers)}"
-        sim.AnimateText(text=get_completed_count, x=880, y=850, textcolor="cyan", fontsize=18, text_anchor="nw")
+        sim.AnimateText(text=get_completed_count, x=880, y=730, textcolor="cyan", fontsize=18, text_anchor="nw")
         
         sim.AnimateText(text=lambda t: f"Pending: {len(self.order_queue)}", x=880, y=810, textcolor="yellow", fontsize=18, text_anchor="nw")
         
@@ -152,7 +152,7 @@ class SimulationEngine:
         
         def get_active_agvs(t):
             return f"Active AGVs: {sum(1 for a in self.agvs if a.status != AGVStatus.IDLE)}/{len(self.agvs)}"
-        sim.AnimateText(text=get_active_agvs, x=880, y=730, textcolor="white", fontsize=16, text_anchor="nw")
+        sim.AnimateText(text=get_active_agvs, x=1000, y=920, textcolor="white", fontsize=16, text_anchor="nw")
 
         # Throughput Tracker
         def get_throughput(t):
@@ -160,7 +160,7 @@ class SimulationEngine:
             comp = sum(len(s.processed_orders) for s in self.servers)
             tp = comp / hr if hr > 0 else 0
             return f"Throughput: {tp:.1f} /hr"
-        sim.AnimateText(text=get_throughput, x=1050, y=850, textcolor="magenta", fontsize=18, text_anchor="nw")
+        sim.AnimateText(text=get_throughput, x=880, y=850, textcolor="magenta", fontsize=18, text_anchor="nw")
 
         # 2. Reactive Live Order Log (Bottom Left of the UI area)
         sim.AnimateRectangle(
@@ -170,7 +170,7 @@ class SimulationEngine:
             linewidth=1,
             arg="UI"
         )
-        sim.AnimateText(text="Reactive Live Orders Status", x=870, y=650, textcolor="lightgreen", fontsize=16, text_anchor="nw")
+        sim.AnimateText(text="Live Orders Status", x=870, y=650, textcolor="lightgreen", fontsize=16, text_anchor="nw")
 
         # Multiple AnimateText loops for colors
         for i in range(25):
@@ -298,8 +298,6 @@ class SimulationEngine:
             agv = AGV(
                 agv_id=i,
                 routing_graph=self.warehouse.routing_graph,
-                server_queue=self.server_queue, # Default shared queue for legacy, will be updated to specific
-                charger_queue=self.charger_queue, # Default shared queue for legacy
                 available_agvs=self.available_agvs,
                 queue_to_component=self.queue_to_component,
                 charger_queues_map={q["node_id"]: q["queue"] for q in self.warehouse.charger_queues},

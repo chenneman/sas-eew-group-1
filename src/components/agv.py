@@ -22,30 +22,24 @@ class AGVStatus(Enum):
 class AGV(sim.Component):
     """ Simulates an AGV navigating the warehouse grid."""
 
-    def setup(self, agv_id: int, routing_graph, server_queue: sim.Queue, charger_queue: sim.Queue, available_agvs: sim.Queue, queue_to_component: dict | None = None, charger_queues_map: dict | None = None, packing_queues_map: dict | None = None) -> None:
+    def setup(self, agv_id: int, routing_graph, available_agvs: sim.Queue, queue_to_component: dict | None = None, charger_queues_map: dict | None = None, packing_queues_map: dict | None = None) -> None:
         """
         :param agv_id: Unique identifier for the AGV.
         :type agv_id: int
         :param routing_graph: The custom graph representing the warehouse floor.
         :type routing_graph: src.models.graph.RoutingGraph
-        :param server_queue: The queue component for the packing area server.
-        :type server_queue: sim.Queue
-        :param charger_queue: The queue component for the charging station.
-        :type charger_queue: sim.Queue
         :param available_agvs: The queue managed by the ControlSystem for idle AGVs.
         :type available_agvs: sim.Queue
         :param queue_to_component: Optional mapping to wake up passive components.
         :type queue_to_component: dict
-        :param charger_queues_map: Optional mapping of node IDs to specific charger queues.
+        :param charger_queues_map: Mapping of node IDs to specific charger queues.
         :type charger_queues_map: dict
-        :param packing_queues_map: Optional mapping of node IDs to specific server queues.
+        :param packing_queues_map: Mapping of node IDs to specific server queues.
         :type packing_queues_map: dict
         """
         self.agv_id = agv_id
         self.routing_graph = routing_graph
         self.graph = routing_graph._graph  # Underlying networkx graph for animation data
-        self.server_queue = server_queue
-        self.charger_queue = charger_queue
         self.available_agvs = available_agvs
         self.queue_to_component = queue_to_component or {}
         self.charger_queues_map = charger_queues_map or {}
@@ -218,10 +212,12 @@ class AGV(sim.Component):
             self.status = AGVStatus.UNLOADING
             
             # Use specific server queue if available based on dropoff route's final node
-            target_server_queue = self.server_queue
             final_node = self.current_task.dropoff_route[-1]
-            if hasattr(self, 'packing_queues_map') and final_node in self.packing_queues_map:
+            if final_node in self.packing_queues_map:
                 target_server_queue = self.packing_queues_map[final_node]
+            else:
+                # Fallback to a default if map is missing (though it shouldn't be in current architecture)
+                target_server_queue = list(self.packing_queues_map.values())[0]
 
             self.enter(target_server_queue)
             self._wakeup_component(target_server_queue)
@@ -236,16 +232,17 @@ class AGV(sim.Component):
                     def score_charger(node_id):
                         dist = nx.shortest_path_length(self.graph, self.current_node, node_id, weight='weight')
                         q_length = 0
-                        if hasattr(self, 'charger_queues_map') and node_id in self.charger_queues_map:
+                        if node_id in self.charger_queues_map:
                             q_length = len(self.charger_queues_map[node_id])
                         return dist + (q_length * QUEUE_PENALTY)
 
                     charger_node = min(charger_nodes, key=score_charger)
                     
-                    # Use specific queue if available, fallback to shared
-                    target_queue = self.charger_queue
-                    if hasattr(self, 'charger_queues_map') and charger_node in self.charger_queues_map:
+                    # Use specific queue if available
+                    if charger_node in self.charger_queues_map:
                         target_queue = self.charger_queues_map[charger_node]
+                    else:
+                        target_queue = list(self.charger_queues_map.values())[0]
                         
                     self.enter(target_queue) # Enter queue immediately to reserve spot and update length
                     

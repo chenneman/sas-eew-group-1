@@ -1,2 +1,2 @@
 # Tests
-Automated tests for the project to validate functionality and logic.
+ Many tests are broken since a lot of the interfaces have changed since.
