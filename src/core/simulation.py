@@ -393,7 +393,7 @@ class SimulationEngine:
         
         # 0. Record simulation period
         self.metrics.warmup_min = WARMUP_MIN
-        self.metrics.sim_duration_min = self.env.now() - WARMUP_MIN
+        self.metrics.sim_duration_min = max(0.0, self.env.now() - WARMUP_MIN)
 
         # 1. Aggregate Order counts (Only those arrived after warmup)
         valid_orders = [o for o in self.order_generator.orders if o.arrival_min >= WARMUP_MIN]
