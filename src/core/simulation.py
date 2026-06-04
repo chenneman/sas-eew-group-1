@@ -41,16 +41,25 @@ from src.core.metrics import SimulationMetrics
 
 class WarmupManager(sim.Component):
     """Component that waits for the warmup period and then resets component metrics."""
-    def setup(self, agvs: list, warmup_time: float):
-        self.agvs = agvs
+    def setup(self, engine, warmup_time: float):
+        self.engine = engine
         self.warmup_time = warmup_time
 
     def process(self):
         self.hold(self.warmup_time)
         print(f"\n--- Warmup Period ({self.warmup_time} min) Finished. Resetting Metrics... ---")
-        for agv in self.agvs:
+        
+        # Manually reset relevant monitors for KPI tracking
+        for agv in self.engine.agvs:
             agv.total_energy_consumed = 0.0
             agv.tasks_completed = 0
+            agv.total_distance = 0.0
+            agv.total_stops = 0
+            agv.mode.reset()
+            agv.soc_monitor.reset()
+            
+        for server in self.engine.servers:
+            server.queue.length_of_stay.reset()
 
 class SimulationEngine:
     """
@@ -288,42 +297,89 @@ class SimulationEngine:
         self.control_system.agvs = self.agvs # Inject complete fleet reference
 
         # 6. Spawn Warmup Manager
-        self.warmup_manager = WarmupManager(agvs=self.agvs, warmup_time=WARMUP_MIN)
+        self.warmup_manager = WarmupManager(engine=self, warmup_time=WARMUP_MIN)
 
     def finalize_metrics(self):
         """Aggregates all component-level data into the central metrics object."""
+        import numpy as np
+        
         # 0. Record simulation period
         self.metrics.warmup_min = WARMUP_MIN
+        self.metrics.sim_duration_min = self.env.now() - WARMUP_MIN
 
         # 1. Aggregate Order counts (Only those arrived after warmup)
         valid_orders = [o for o in self.order_generator.orders if o.arrival_min >= WARMUP_MIN]
         self.metrics.total_orders_generated = len(valid_orders)
 
         # 2. Aggregate Server data (Orders completed and fulfillment times)
+        all_valid_completed = []
         for server in self.servers:
             # Filter orders by arrival time to exclude warmup bias
             valid_completed = [o for o in server.processed_orders if o.arrival_min >= WARMUP_MIN]
+            all_valid_completed.extend(valid_completed)
             self.metrics.total_orders_completed += len(valid_completed)
             for order in valid_completed:
                 fulfillment_time = order.completion_time - order.arrival_min
                 self.metrics.order_fulfillment_times.append(fulfillment_time)
-        
-        # 3. Pending orders (Only those arrived after warmup)
+
+        # 3. Pending & In-Progress orders
         self.metrics.pending_orders = sum(1 for o in self.order_queue if o.arrival_min >= WARMUP_MIN)
-        
-        # 4. In-Progress orders (Total - Pending - Fulfilled)
         self.metrics.in_progress_orders = (
             self.metrics.total_orders_generated - 
             self.metrics.pending_orders - 
             self.metrics.total_orders_completed
         )
 
-        # 5. Aggregate AGV data (Energy and task counts - these were reset at WARMUP_MIN)
+        # 4. KPI: Optimization Targets
+        if all_valid_completed:
+            self.metrics.total_mass_delivered = sum(o.item.weight for o in all_valid_completed)
+        self.metrics.total_distance_traveled = sum(agv.total_distance for agv in self.agvs)
+
+        # 5. KPI: Service Level Objectives
+        # Throughput
+        if all_valid_completed:
+            hourly_counts = {}
+            for o in all_valid_completed:
+                hr = int((o.completion_time - WARMUP_MIN) // 60)
+                hourly_counts[hr] = hourly_counts.get(hr, 0) + 1
+            if hourly_counts:
+                self.metrics.peak_throughput_hr = max(hourly_counts.values())
+        
+        # Min SoC
+        self.metrics.min_fleet_soc = min(agv.soc_monitor.minimum() for agv in self.agvs if agv.soc_monitor.number_of_entries() > 0)
+
+        # 6. KPI: Diagnostic Metrics
+        assigned_orders = [o for o in valid_orders if o.assignment_min is not None]
+        if assigned_orders:
+            self.metrics.batching_delays = [o.assignment_min - o.arrival_min for o in assigned_orders]
+        
+        # Average packing queue time from servers
+        queue_means = [server.queue.length_of_stay.mean() for server in self.servers if server.queue.length_of_stay.number_of_entries() > 0]
+        if queue_means:
+            self.metrics.avg_packing_queue_min = np.mean(queue_means)
+
+        self.metrics.total_stops = sum(agv.total_stops for agv in self.agvs)
+        self.metrics.total_tasks_completed = sum(agv.tasks_completed for agv in self.agvs)
+
+        # 7. Aggregate AGV data (Energy and Time Breakdown)
         for agv in self.agvs:
             self.metrics.energy_consumed_wh += agv.total_energy_consumed
+            
+            # mode is a monitor. weight() gives the total time spent in a given string value
+            total_time = self.metrics.sim_duration_min
+            moving_pct = (agv.mode.value_duration("MOVING") / total_time * 100) if total_time > 0 else 0
+            idle_pct = (agv.mode.value_duration("IDLE") / total_time * 100) if total_time > 0 else 0
+            charging_pct = (agv.mode.value_duration("CHARGING") / total_time * 100) if total_time > 0 else 0
+            
+            min_soc = agv.soc_monitor.minimum() if agv.soc_monitor.number_of_entries() > 0 else agv.soc
+
             self.metrics.agv_metrics[agv.agv_id] = {
                 "energy": agv.total_energy_consumed,
-                "tasks": agv.tasks_completed
+                "tasks": agv.tasks_completed,
+                "min_soc": min_soc,
+                "moving_pct": moving_pct,
+                "idle_pct": idle_pct,
+                "charging_pct": charging_pct
             }
 
     def run(self, till: float):

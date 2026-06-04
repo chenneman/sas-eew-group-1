@@ -24,6 +24,7 @@ class Order:
     item: Item
     arrival_min: float
     status: OrderStatus = OrderStatus.PENDING
+    assignment_min: float | None = None
     completion_min: float | None = None
 
     @property

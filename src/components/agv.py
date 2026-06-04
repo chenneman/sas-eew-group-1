@@ -57,6 +57,9 @@ class AGV(sim.Component):
         # Metrics tracking
         self.total_energy_consumed = 0.0
         self.tasks_completed = 0
+        self.total_distance = 0.0
+        self.total_stops = 0
+        self.soc_monitor = sim.Monitor(name=f"soc_agv_{agv_id}")
 
         # State tracking
         self.status = AGVStatus.IDLE
@@ -255,6 +258,9 @@ class AGV(sim.Component):
             self.next_node = route_node_ids[i + 1]
 
             dist = self.graph[self.current_node][self.next_node]['weight']
+            self.total_distance += dist
+            self.total_stops += 1
+            
             # dist [m] / speed [m/s] = time [s] -> convert to [min]
             travel_time = (dist / DRIVE_SPEED) / 60.0
 
@@ -263,5 +269,6 @@ class AGV(sim.Component):
             energy_used = (E_BASE + (ALPHA * self.payload_mass)) * dist
             self.battery -= energy_used
             self.total_energy_consumed += energy_used
+            self.soc_monitor.tally(self.soc)
 
         self.current_node = route_node_ids[-1]
