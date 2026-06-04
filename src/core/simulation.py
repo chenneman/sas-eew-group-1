@@ -31,12 +31,26 @@ from src.config import (
     LOG_TRACE_TO_FILE,
     RANDOM_SEED,
     ANIMATE,
-    SIM_START_HOUR
+    SIM_START_HOUR,
+    WARMUP_MIN
 )
 
 from src.utils.paths import LOGS_DIR
 
 from src.core.metrics import SimulationMetrics
+
+class WarmupManager(sim.Component):
+    """Component that waits for the warmup period and then resets component metrics."""
+    def setup(self, agvs: list, warmup_time: float):
+        self.agvs = agvs
+        self.warmup_time = warmup_time
+
+    def process(self):
+        self.hold(self.warmup_time)
+        print(f"\n--- Warmup Period ({self.warmup_time} min) Finished. Resetting Metrics... ---")
+        for agv in self.agvs:
+            agv.total_energy_consumed = 0.0
+            agv.tasks_completed = 0
 
 class SimulationEngine:
     """
@@ -273,27 +287,38 @@ class SimulationEngine:
 
         self.control_system.agvs = self.agvs # Inject complete fleet reference
 
+        # 6. Spawn Warmup Manager
+        self.warmup_manager = WarmupManager(agvs=self.agvs, warmup_time=WARMUP_MIN)
+
     def finalize_metrics(self):
         """Aggregates all component-level data into the central metrics object."""
-        # 1. Aggregate Order counts
-        self.metrics.total_orders_generated = self.order_generator.orders_generated
-        self.metrics.pending_orders = len(self.order_queue)
+        # 0. Record simulation period
+        self.metrics.warmup_min = WARMUP_MIN
+
+        # 1. Aggregate Order counts (Only those arrived after warmup)
+        valid_orders = [o for o in self.order_generator.orders if o.arrival_min >= WARMUP_MIN]
+        self.metrics.total_orders_generated = len(valid_orders)
 
         # 2. Aggregate Server data (Orders completed and fulfillment times)
         for server in self.servers:
-            self.metrics.total_orders_completed += len(server.processed_orders)
-            for order in server.processed_orders:
+            # Filter orders by arrival time to exclude warmup bias
+            valid_completed = [o for o in server.processed_orders if o.arrival_min >= WARMUP_MIN]
+            self.metrics.total_orders_completed += len(valid_completed)
+            for order in valid_completed:
                 fulfillment_time = order.completion_time - order.arrival_min
                 self.metrics.order_fulfillment_times.append(fulfillment_time)
         
-        # 3. Calculate In-Progress orders (Total - Pending - Fulfilled)
+        # 3. Pending orders (Only those arrived after warmup)
+        self.metrics.pending_orders = sum(1 for o in self.order_queue if o.arrival_min >= WARMUP_MIN)
+        
+        # 4. In-Progress orders (Total - Pending - Fulfilled)
         self.metrics.in_progress_orders = (
             self.metrics.total_orders_generated - 
             self.metrics.pending_orders - 
             self.metrics.total_orders_completed
         )
 
-        # 4. Aggregate AGV data (Energy and task counts)
+        # 5. Aggregate AGV data (Energy and task counts - these were reset at WARMUP_MIN)
         for agv in self.agvs:
             self.metrics.energy_consumed_wh += agv.total_energy_consumed
             self.metrics.agv_metrics[agv.agv_id] = {

@@ -12,6 +12,7 @@ from src.utils.paths import LOGS_DIR
 @dataclass
 class SimulationMetrics:
     """Aggregates performance data for the final report."""
+    warmup_min: float = 0.0
     total_orders_generated: int = 0
     total_orders_completed: int = 0
     pending_orders: int = 0
@@ -26,6 +27,8 @@ class SimulationMetrics:
         lines.append("\n" + "="*50)
         lines.append("      SAS AGV SIMULATION SUMMARY REPORT")
         lines.append("="*50)
+        if self.warmup_min > 0:
+            lines.append(f"NOTE: Metrics exclude warmup period (first {self.warmup_min} min)")
         lines.append(f"Total Orders Generated:    {self.total_orders_generated}")
         lines.append(f"Total Orders Fulfilled:    {self.total_orders_completed}")
         lines.append(f"Orders Still Pending:      {self.pending_orders}")
