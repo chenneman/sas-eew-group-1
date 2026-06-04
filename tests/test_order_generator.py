@@ -15,9 +15,9 @@ import matplotlib
 matplotlib.use("Agg")
 
 from src.utils.paths import LOGS_DIR
-from src.config import ORDERS_PER_HOUR, TOTAL_MIN, WARMUP_MIN, SIM_START_HOUR
+from src.config import TOTAL_MIN, WARMUP_MIN, SIM_START_HOUR
 from src.entities.order import Order
-from src.components.order_generator import OrderGenerator
+from src.components.order_generator import OrderGenerator, ORDERS_PER_HOUR
 from src.entities.item import load_items
 
 # ── Replication runner ────────────────────────────────────────────────────────

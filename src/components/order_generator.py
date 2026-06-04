@@ -3,15 +3,22 @@
 import random
 import salabim as sim
 
-from src.config import ORDERS_PER_HOUR, SIM_START_HOUR
+from src.config import SIM_START_HOUR, ORDER_RATE_MULTIPLIER
 from src.entities.order import Order
+
+ORDERS_PER_HOUR = [
+    13.0,  7.5,  5.0,  4.5,  4.0,  4.0,   # 00-05
+     5.0,  8.0, 16.0, 24.0, 30.0, 32.0,   # 06-11
+    29.5, 32.0, 32.0, 32.0, 32.5, 30.0,   # 12-17
+    28.0, 30.0, 30.5, 30.5, 28.0, 21.0,   # 18-23
+]
 
 # ── Helper functions ──────────────────────────────────────────────────────────
 
 def mean_iat_minutes(sim_minute: float) -> float:
     """Mean inter-arrival time [min] for the current simulation time."""
     real_hour = int(SIM_START_HOUR + sim_minute // 60) % 24
-    lam = ORDERS_PER_HOUR[real_hour]
+    lam = ORDERS_PER_HOUR[real_hour] * ORDER_RATE_MULTIPLIER
     return 60.0 / lam if lam > 0 else 60.0
 
 # ── OrderGenerator ────────────────────────────────────────────────────────────

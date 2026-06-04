@@ -10,18 +10,15 @@ N_SERVERS  = 2              # Number of servers
 N_CHARGERS = N_AGV          # Number of chargers
 N_ITEMS    = 100            # Number of items
 
-# Order Generation Parameters
-ORDERS_PER_HOUR = [
-    13.0,  7.5,  5.0,  4.5,  4.0,  4.0,   # 00-05
-     5.0,  8.0, 16.0, 24.0, 30.0, 32.0,   # 06-11
-    29.5, 32.0, 32.0, 32.0, 32.5, 30.0,   # 12-17
-    28.0, 30.0, 30.5, 30.5, 28.0, 21.0,   # 18-23
-]
 
 # Control Parameters
 INNOVATION_ENABLED = True  # True = Multi-stop picking, False = 1 order per AGV
 MAX_WAIT_TIME = 5 # maximum time (in sim minutes) to wait for a full batch before triggering.
-BATCH_SIZE = 3 # the number of orders to pool before triggering a routing run.
+BATCH_SIZE = 5 # the number of orders to pool before triggering a routing run.
+
+# Scaling Multipliers
+ORDER_RATE_MULTIPLIER = 10.0 # Multiplies orders/hr rate (e.g., 2.0 doubles demand)
+SERVICE_TIME_MULTIPLIER = 2.0 # Multiplies unloading/packing time (e.g., 2.0 makes it 2x slower)
 
 # Time parameters
 SIM_START_HOUR = 0
@@ -31,7 +28,7 @@ TOTAL_MIN      = WARMUP_MIN + HORIZON_MIN
 
 # Simulation parameters
 ANIMATE = True # If False much faster
-INITIAL_ANIM_SPEED = 3      # Initial animation speed (e.g., 1 for synced)
+INITIAL_ANIM_SPEED = 1      # Initial animation speed (e.g., 1 for synced)
 INITIAL_BATTERY_FACTOR = 0.15 # Fraction of MAX_BATTERY to start with (e.g. 0.05 for testing)
 LOG_TRACE_TO_FILE = False  # If True, saves Salabim trace to logs/trace.log
 SAVE_SUMMARY_TO_FILE = True # If True, saves the final KPI summary to logs/summary.txt
@@ -42,10 +39,11 @@ RANDOM_SEED = 1234           # Seed for reproducible simulation runs
 MAX_BATTERY    = 621.6 # Wh
 SOC_THRESHOLD   = 10 # %
 BATTERY_THRESHOLD  = 0.01 * SOC_THRESHOLD * MAX_BATTERY
-DRIVE_SPEED   = 3.5 # m/s
+DRIVE_SPEED   = 1 # originally 3.5 # m/s
 E_BASE        = 0.1 # originally 0.0489 # Wh/m
 ALPHA       = 0.0001 # Wh/(kg·m)
 MAX_VOLUME = 60 * 40 * 40 # cm^3
 MAX_PAYLOAD = 40.0 # kg
 CHARGE_RATE = 43.17 # Wh/min
+PICK_TIME_PER_ITEM = 60 # Seconds per item picked
 

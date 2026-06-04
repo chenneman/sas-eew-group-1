@@ -11,7 +11,7 @@ from src.components.agv import AGVStatus
 from src.entities.task import Task
 
 from src.config import (BATCH_SIZE, MAX_WAIT_TIME, MAX_BATTERY, MAX_VOLUME, MAX_PAYLOAD,
-                        BATTERY_THRESHOLD, E_BASE, ALPHA, INNOVATION_ENABLED)
+                        BATTERY_THRESHOLD, E_BASE, ALPHA, INNOVATION_ENABLED, PICK_TIME_PER_ITEM)
 
 
 # TODO refactor spaghetti to more functions, add typehints
@@ -185,7 +185,7 @@ class ControlSystem(sim.Component):
         all_pois = list(set([packing_node] + pickup_nodes + list(agv_start_nodes.values())))
         poi_to_idx = {node_id: i for i, node_id in enumerate(all_pois)}
         n_pois = len(all_pois)
-        print(f"Number of POIs: {n_pois}")
+        #print(f"Number of POIs: {n_pois}")
 
         # 2. Build Distance Matrix (Pre-calculate shortest paths)
         # -------------------------------------------------------
@@ -300,7 +300,7 @@ class ControlSystem(sim.Component):
 
             model.addConstr(gp.quicksum(orders[O.index(o)].item.weight * y[o, v] for o in O) <= MAX_PAYLOAD)
 
-        print(f"Gurobi model - Vars: {model.NumVars}, Constrs: {model.NumConstrs}")
+        #print(f"Gurobi model - Vars: {model.NumVars}, Constrs: {model.NumConstrs}")
         model.optimize()
         
         if model.status != GRB.OPTIMAL:
@@ -340,7 +340,7 @@ class ControlSystem(sim.Component):
                     pickups.append(PickupSegment(
                         route=segment_path if not full_grid_path else segment_path,
                         items=items_here,
-                        pick_time=(5.0 * len(items_here)) / 60.0 # 5s per item -> minutes
+                        pick_time=(PICK_TIME_PER_ITEM * len(items_here)) / 60.0 # config value -> minutes
                     ))
                 
                 if k == 0:
