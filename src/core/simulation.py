@@ -30,7 +30,8 @@ from src.config import (
     INITIAL_BATTERY_FACTOR,
     LOG_TRACE_TO_FILE,
     RANDOM_SEED,
-    ANIMATE
+    ANIMATE,
+    SIM_START_HOUR
 )
 
 from src.utils.paths import LOGS_DIR
@@ -96,20 +97,35 @@ class SimulationEngine:
 
     def _build_ui(self):
         """Creates the on-screen UI overlay for real-time metrics."""
-        # Background for the metrics box (Top Right, shifted left by 90px)
+        # Background for the metrics box (Top Right, expanded to fit all text)
         sim.AnimateRectangle(
-            spec=(860, 650, 1090, 780),
+            spec=(860, 620, 1140, 780),
             fillcolor="black",
             linecolor="white",
             linewidth=2,
             arg="UI"
         )
         
-        # Simulation Time
+        # Real-world Clock (HH:MM)
+        def get_clock_time(t):
+            total_mins = self.env.now() + (SIM_START_HOUR * 60)
+            hrs = int((total_mins // 60) % 24)
+            mins = int(total_mins % 60)
+            return f"{hrs:02d}:{mins:02d}"
+
         sim.AnimateText(
-            text=lambda t: f"Time: {self.env.now():.1f} min",
-            x=880, y=750,
-            textcolor="white", fontsize=18
+            text=get_clock_time,
+            x=880, y=760,
+            textcolor="lightgray", fontsize=14,
+            text_anchor="nw"
+        )
+
+        # Simulation Time (Cumulative)
+        sim.AnimateText(
+            text=lambda t: f"Sim Time: {self.env.now():.1f} min",
+            x=880, y=740,
+            textcolor="white", fontsize=16,
+            text_anchor="nw"
         )
         
         # Orders Completed
@@ -119,15 +135,17 @@ class SimulationEngine:
             
         sim.AnimateText(
             text=get_completed_count,
-            x=880, y=720,
-            textcolor="cyan", fontsize=16
+            x=880, y=710,
+            textcolor="cyan", fontsize=16,
+            text_anchor="nw"
         )
         
         # Pending Orders
         sim.AnimateText(
             text=lambda t: f"Pending: {len(self.order_queue)}",
-            x=880, y=690,
-            textcolor="yellow", fontsize=16
+            x=880, y=680,
+            textcolor="yellow", fontsize=16,
+            text_anchor="nw"
         )
         
         # In-Progress Orders (Assigned but not yet completed)
@@ -139,8 +157,9 @@ class SimulationEngine:
             
         sim.AnimateText(
             text=get_in_progress,
-            x=880, y=665,
-            textcolor="orange", fontsize=15
+            x=880, y=650,
+            textcolor="orange", fontsize=15,
+            text_anchor="nw"
         )
         
         # Active AGVs
@@ -150,13 +169,14 @@ class SimulationEngine:
             
         sim.AnimateText(
             text=get_active_agvs,
-            x=880, y=640,
-            textcolor="white", fontsize=14
+            x=880, y=625,
+            textcolor="white", fontsize=14,
+            text_anchor="nw"
         )
         
-        # Live Order Log Background (Right side, shifted left by 90px)
+        # Live Order Log Background (Right side)
         sim.AnimateRectangle(
-            spec=(860, 50, 1090, 600),
+            spec=(860, 50, 1140, 600),
             fillcolor="#111111",
             linecolor="gray",
             linewidth=1,
@@ -164,7 +184,7 @@ class SimulationEngine:
         )
         
         sim.AnimateText(
-            text="Live Orders",
+            text="Live Orders Status",
             x=870, y=575,
             textcolor="lightgreen", fontsize=14
         )
@@ -177,7 +197,7 @@ class SimulationEngine:
         sim.AnimateText(
             text=get_log_text,
             x=870, y=550,
-            textcolor="lightgray", fontsize=10,
+            textcolor="lightgray", fontsize=9, # Reduced slightly to fit status
             text_anchor="nw"
         )
 

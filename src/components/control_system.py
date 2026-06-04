@@ -102,6 +102,10 @@ class ControlSystem(sim.Component):
                 agv.status = AGVStatus.MOVING
                 for order in task.orders:
                     order.status = "ASSIGNED"
+                    # Update live log status if present
+                    if hasattr(self.warehouse, 'live_order_log'): # Wait, it's on generator usually.
+                        pass # Generator owns the log list. 
+                    
                     self.order_queue.remove(order)
                 agv.activate()
             self.last_batch_time = self.env.now()
