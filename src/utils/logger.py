@@ -77,3 +77,23 @@ def setup_logger(level: str = "INFO", save_to_file: bool = False, log_file: Path
         logger.addHandler(file_handler)
 
     return logger
+
+class UILogHandler(logging.Handler):
+    """
+    Custom logging handler that appends formatted log messages to a list.
+    Used for mirroring terminal logs to a Salabim UI component.
+    """
+    def __init__(self, log_list: list, max_lines: int = 20):
+        super().__init__()
+        self.log_list = log_list
+        self.max_lines = max_lines
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            self.log_list.append(msg)
+            # Keep the list size bounded
+            if len(self.log_list) > self.max_lines:
+                self.log_list.pop(0)
+        except Exception:
+            self.handleError(record)

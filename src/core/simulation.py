@@ -3,6 +3,7 @@ Core Simulation Engine.
 Orchestrates the setup and execution of the Salabim environment and all components.
 """
 
+import logging
 import salabim as sim
 
 # Environment
@@ -32,14 +33,13 @@ from src.config import (
     RANDOM_SEED,
     ANIMATE,
     SIM_START_HOUR,
-    WARMUP_MIN
+    WARMUP_MIN,
+    LOG_LEVEL
 )
 
 from src.utils.paths import LOGS_DIR
+from src.utils.logger import UILogHandler
 
-import logging
-
-# ... existing imports ...
 from src.core.metrics import SimulationMetrics
 
 logger = logging.getLogger(__name__)
@@ -88,21 +88,31 @@ class SimulationEngine:
         else:
             self.env = sim.Environment(trace=False, random_seed=RANDOM_SEED)
 
-        if self.animate:
-            self.env.animation_parameters(animate=True, speed=INITIAL_ANIM_SPEED, width=1920, height=1080)
-            self.env.background_color("black")
-
+        # 1. World & Queues must be built before UI
         self._build_world()
         self._instantiate_queues()
         self._boot_components()
-        
+
+        # 2. Setup UI Log Mirroring (only if animating)
         if self.animate:
+            # Create a simple formatter for UI (no colors, no complex date)
+            ui_fmt = logging.Formatter("%(levelname)-5s %(message)s")
+            self.ui_log_handler = UILogHandler(self.live_event_log, max_lines=25)
+            self.ui_log_handler.setFormatter(ui_fmt)
+            self.ui_log_handler.setLevel(LOG_LEVEL)
+            logging.getLogger().addHandler(self.ui_log_handler)
+
+        if self.animate:
+            self.env.animation_parameters(animate=True, speed=INITIAL_ANIM_SPEED, width=1920, height=1080)
+            self.env.background_color("black")
             self._build_ui()
             
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Ensures log files are properly closed."""
+        """Ensures log files and UI handlers are properly closed."""
+        if hasattr(self, 'ui_log_handler'):
+            logging.getLogger().removeHandler(self.ui_log_handler)
         if self._trace_file:
             self._trace_file.close()
 
@@ -240,14 +250,56 @@ class SimulationEngine:
             sim.AnimateText(text=lambda t, a=agv: agv_orders(t, a), x=bx+10, y=by-125, textcolor="orange", fontsize=12, text_anchor="nw")
             
             def agv_energy(t, a=agv): 
-                energy = a.total_energy if hasattr(a, 'total_energy') else 0.0
+                energy = a.total_energy_consumed if hasattr(a, 'total_energy_consumed') else 0.0
                 return f"Energy: {energy:.1f} Wh"
             sim.AnimateText(text=lambda t, a=agv: agv_energy(t, a), x=bx+10, y=by-150, textcolor="white", fontsize=12, text_anchor="nw")
+
+        # 4. Reactive Live Event Log (Bottom Right)
+        # Position it below the AGV telemetry grid
+        # For 4 AGVs, telemetry ends at y=530. Let's start log at y=510.
+        log_panel_y = 510
+        if N_AGV > 4:
+             # Adjust if more rows of AGVs exist
+             log_panel_y = start_y - ((N_AGV + 1) // 2) * (box_h + padding) + padding
+
+        sim.AnimateRectangle(
+            spec=(start_x, 50, 1860, log_panel_y), # Width matching telemetry grid
+            fillcolor="#0a0a0a",
+            linecolor="cyan",
+            linewidth=1,
+            arg="UI"
+        )
+        sim.AnimateText(text="Live Simulation Events (Log)", x=start_x + 10, y=log_panel_y - 25, textcolor="cyan", fontsize=16, text_anchor="nw")
+
+        for i in range(20):
+            def event_text(t, idx=i):
+                if idx < len(self.live_event_log):
+                    return self.live_event_log[-(idx+1)]
+                return ""
+            
+            def event_color(t, idx=i):
+                if idx < len(self.live_event_log):
+                    line = self.live_event_log[-(idx+1)]
+                    if "DEBUG" in line: return "cyan"
+                    if "INFO" in line: return "lightgreen"
+                    if "WARNING" in line: return "yellow"
+                    if "ERROR" in line: return "red"
+                return "white"
+
+            y_pos = log_panel_y - 55 - (i * 20)
+            sim.AnimateText(
+                text=lambda t, idx=i: event_text(t, idx),
+                x=start_x + 10, y=y_pos,
+                textcolor=lambda t, idx=i: event_color(t, idx),
+                fontsize=11,
+                text_anchor="nw"
+            )
 
     def _instantiate_queues(self):
         """Creates the central communication queues and component mappings."""
         self.order_queue = [] # Standard list because Orders are passive dataclasses
         self.live_order_log = [] # List of strings for UI display
+        self.live_event_log = [] # List of strings for UI log mirroring
         self.available_agvs = sim.Queue("available_agvs")
         self.server_queue = sim.Queue("server_queue")
         self.charger_queue = sim.Queue("charger_queue")
@@ -404,4 +456,3 @@ class SimulationEngine:
         """Executes the simulation for the specified duration."""
         self.env.run(till=till)
         self.finalize_metrics()
-

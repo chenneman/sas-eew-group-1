@@ -32,7 +32,7 @@ INITIAL_ANIM_SPEED = 1      # Initial animation speed (e.g., 1 for synced)
 INITIAL_BATTERY_FACTOR = 0.15 # Fraction of MAX_BATTERY to start with (e.g. 0.05 for testing)
 # Logging parameters
 LOG_LEVEL = "INFO"             # DEBUG, INFO, WARNING, ERROR, CRITICAL
-SAVE_LOG_TO_FILE = True       # If True, saves custom logs to logs/simulation.log
+SAVE_LOG_TO_FILE = False       # If True, saves custom logs to logs/simulation.log
 LOG_TRACE_TO_FILE = False      # If True, saves Salabim trace to logs/trace.log
 SAVE_SUMMARY_TO_FILE = True    # If True, saves the final KPI summary to logs/summary.txt
 RANDOM_SEED = 1234           # Seed for reproducible simulation runs
