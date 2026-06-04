@@ -1,6 +1,16 @@
 """
 Entry point for the SAS Energy-Aware AGV Simulation.
 """
+import ctypes
+import os
+
+# Fix blurry text (Tkinter DPI awareness) on Windows
+if os.name == "nt":
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)
+    except Exception:
+        pass
+
 from dotenv import load_dotenv
 load_dotenv()
 

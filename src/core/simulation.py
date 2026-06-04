@@ -29,7 +29,7 @@ from src.config import (
     MAX_BATTERY,
     INITIAL_ANIM_SPEED,
     INITIAL_BATTERY_FACTOR,
-    LOG_TRACE_TO_FILE,
+    SAVE_TRACE_TO_FILE,
     RANDOM_SEED,
     ANIMATE,
     ENABLE_UI_LOGGING,
@@ -81,7 +81,7 @@ class SimulationEngine:
 
     def __enter__(self):
         """Initializes the simulation environment and logs."""
-        if LOG_TRACE_TO_FILE:
+        if SAVE_TRACE_TO_FILE:
             if not LOGS_DIR.exists():
                 LOGS_DIR.mkdir(parents=True, exist_ok=True)
             self._trace_file = open(LOGS_DIR / "trace.log", "w")
@@ -104,8 +104,25 @@ class SimulationEngine:
             logging.getLogger().addHandler(self.ui_log_handler)
 
         if self.animate:
-            self.env.animation_parameters(animate=True, speed=INITIAL_ANIM_SPEED, width=1920, height=1080)
+            # Set a standard 16:9 physical window size and logical width.
+            self.env.animation_parameters(
+                animate=True, 
+                speed=INITIAL_ANIM_SPEED, 
+                width=1920, 
+                height=1080,
+                x0=0, y0=0,
+                x1=1920 
+            )
             self.env.background_color("black")
+            
+            # Try to maximize the window immediately to fill the screen and avoid white borders
+            try:
+                if hasattr(self.env, "root"):
+                    self.env.root.state('zoomed')
+                    self.env.root.configure(background='black')
+            except Exception:
+                pass
+                
             self._build_ui()
             
         return self
