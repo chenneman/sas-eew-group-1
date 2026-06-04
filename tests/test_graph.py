@@ -2,7 +2,7 @@
 Manual test script for the warehouse RoutingGraph.
 """
 
-from src.models.graph import RoutingGraph, Node, NodeType
+from src.environment.graph import RoutingGraph, Node, NodeType
 
 
 def run_manual_test():

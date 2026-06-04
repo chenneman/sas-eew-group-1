@@ -1,55 +1,63 @@
 """
-Standalone test script for verifying AGV behavior.
-Runs entirely isolated using mock Server and Charger components.
+Standalone test script for verifying AGV behavior, specifically focusing on the charging lifecycle.
+Runs isolated using mock Server and Charger components.
 """
 
-import sys
-import os
 import salabim as sim
 
-# Ensure the src directory is accessible
-#sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from src.components.agv import AGV, AGVStatus
+from src.entities.task import Task, PickupSegment
+from src.entities.item import Item
+from src.environment.graph import NodeType, Node, RoutingGraph
+from src.utils.animation import grid_to_pixel
 
-from src.models.agv import AGV, AGVStatus
-from src.models.task import Task, PickupSegment
-from src.models.item import Item
-from src.models.graph import NodeType, Node, RoutingGraph
-
+from src.config import MAX_BATTERY, BATTERY_THRESHOLD, CHARGE_RATE
 
 # --- Mock Components ---
 
 class MockServer(sim.Component):
+    """Simple mock server that processes AGVs from a queue."""
     def setup(self, queue: sim.Queue) -> None:
         self.queue = queue
 
     def process(self):
         while True:
             if len(self.queue) == 0:
-                self.hold(1)
+                self.passivate()
                 continue
 
             agv = self.queue.pop()
-            self.hold(8)
+            print(f"[Mock Server] Unloading AGV {agv.agv_id}...")
+            self.hold(5) # Unloading time
             agv.activate()
 
 
 class MockCharger(sim.Component):
+    """Simple mock charger that refills AGV battery."""
     def setup(self, queue: sim.Queue) -> None:
         self.queue = queue
 
     def process(self):
         while True:
             if len(self.queue) == 0:
-                self.hold(1)
+                self.passivate()
                 continue
 
             agv = self.queue.pop()
-            self.hold(15)
-            agv.soc = agv.max_battery
+            print(f"[Mock Charger] Charging AGV {agv.agv_id}...")
+            
+            # Calculate time to full
+            missing_charge = MAX_BATTERY - agv.battery
+            charge_time = missing_charge / CHARGE_RATE
+            
+            self.hold(charge_time)
+            agv.battery = MAX_BATTERY
+            print(f"[Mock Charger] AGV {agv.agv_id} fully charged.")
             agv.activate()
 
 
 class MockControlSystem(sim.Component):
+    """Dispatches tasks and forces low-battery states for testing."""
     def setup(self, available_agvs: sim.Queue, routing_graph: RoutingGraph) -> None:
         self.available_agvs = available_agvs
         self.routing_graph = routing_graph
@@ -57,90 +65,115 @@ class MockControlSystem(sim.Component):
 
     def process(self):
         while True:
-            self.hold(10)
+            if len(self.available_agvs) == 0:
+                self.passivate()
+                continue
 
-            if len(self.available_agvs) > 0:
-                agv = self.available_agvs.pop()
-                self.task_count += 1
+            agv = self.available_agvs.pop()
+            self.task_count += 1
+            print(f"\n[Mock Dispatcher] Dispatching Task {self.task_count} to AGV {agv.agv_id}")
 
-                # Create dummy items for multi-stop picking
-                item1 = Item(sku=1, name="Chair", weight=15.0, length=1, width=1, height=1, volume=1, url="")
-                item2 = Item(sku=2, name="Table", weight=20.0, length=1, width=1, height=1, volume=1, url="")
+            # Create dummy items
+            item1 = Item(sku=101, name="Widget", weight=5.0, length=1, width=1, height=1, volume=1, url="")
+            
+            # Simple route: Node 1 (IDLE) -> Node 2 (SHELF) -> Node 3 (PACKING)
+            route_to_shelf = self.routing_graph.get_shortest_path(agv.current_node, 2)
+            seg = PickupSegment(route=route_to_shelf, items=[item1], pick_time=2.0)
+            
+            dropoff_route = self.routing_graph.get_shortest_path(2, 3)
 
-                # Route to first shelf
-                route1 = self.routing_graph.get_shortest_path(agv.current_node, 2)
-                seg1 = PickupSegment(route=route1, items=[item1], pick_time=5.0)
+            agv.current_task = Task(
+                task_id=self.task_count,
+                pickups=[seg],
+                dropoff_route=dropoff_route
+            )
 
-                # Route from first shelf to second shelf
-                route2 = self.routing_graph.get_shortest_path(2, 5)
-                seg2 = PickupSegment(route=route2, items=[item2], pick_time=4.0)
-
-                # Route from final shelf to packing
-                dropoff_route = self.routing_graph.get_shortest_path(5, 3)
-
-                agv.current_task = Task(
-                    task_id=self.task_count,
-                    pickups=[seg1, seg2],
-                    dropoff_route=dropoff_route
-                )
-
-                # Artificially drain battery to force charging test every other task
-                if self.task_count % 2 == 0:
-                    print(f"\n[Mock Dispatcher] Artificially draining AGV {agv.agv_id} battery to test charging sequence!\n")
-                    agv.soc = agv.soc_threshold + 5.0  # Drop close to threshold so task drain pushes it under
-
-                agv.activate()
+            # Force charging every 3rd task by draining battery significantly below threshold
+            if self.task_count % 3 == 0:
+                print(f"[Mock Dispatcher] !!! FORCING LOW BATTERY on AGV {agv.agv_id} !!!")
+                agv.battery = BATTERY_THRESHOLD - 10.0
+            
+            agv.activate()
+            self.hold(20) # Wait before next dispatch
 
 
 # --- Execution ---
 
 def run_simulation() -> None:
     env = sim.Environment(trace=False)
+    env.animate(True)
+    env.modelname("AGV Charging Lifecycle Test")
+    env.background_color("black")
 
-    env.animate(True)  # Set to False if running in headless environment
-    env.modelname("Isolated AGV Test")
-    env.background_color("20%gray")
-
-    pixel_scale = 30
-
+    # 1. Build Graph
     routing_graph = RoutingGraph()
-
-    # Define Nodes using the domain model
-    nodes_data = [
-        Node(1, (1 * pixel_scale, 1 * pixel_scale), NodeType.IDLE),
-        Node(2, (10 * pixel_scale, 10 * pixel_scale), NodeType.SHELF),
-        Node(3, (10 * pixel_scale, 1 * pixel_scale), NodeType.PACKING),
-        Node(4, (1 * pixel_scale, 10 * pixel_scale), NodeType.CHARGING),
-        Node(5, (18 * pixel_scale, 5 * pixel_scale), NodeType.SHELF)
+    nodes = [
+        Node(1, (2, 2), NodeType.IDLE),
+        Node(2, (15, 15), NodeType.SHELF),
+        Node(3, (25, 2), NodeType.PACKING),
+        Node(4, (2, 15), NodeType.CHARGING),
     ]
+    for n in nodes:
+        routing_graph.add_node(n)
+        px, py = grid_to_pixel(n.coords[0]), grid_to_pixel(n.coords[1])
+        sim.AnimateCircle(radius=10, x=px, y=py, fillcolor="white", linecolor="gray")
+        sim.AnimateText(text=f"{n.id}:{n.type.name}", x=px, y=py+20, textcolor="white")
 
-    for node in nodes_data:
-        routing_graph.add_node(node)
-        # Add animation elements using the node data
-        sim.AnimateCircle(radius=5, x=node.coords[0], y=node.coords[1], fillcolor="white")
-        sim.AnimateText(text=f"N{node.id} ({node.type.name})", 
-                        x=node.coords[0] + 10, y=node.coords[1] + 10,
-                        textcolor="white")
-
-    # Define edges using domain model method (which calculates distances)
-    edges = [(1, 2), (2, 5), (5, 3), (3, 1), (1, 4), (4, 2)]
+    edges = [(1, 2), (2, 3), (3, 1), (1, 4), (4, 2)]
     for u, v in edges:
         routing_graph.add_edge(u, v)
 
+    # 2. Queues
     server_q = sim.Queue("ServerQueue")
     charger_q = sim.Queue("ChargerQueue")
     available_agvs_q = sim.Queue("AvailableAGVs")
 
+    # 3. Components
     server = MockServer(queue=server_q)
     charger = MockCharger(queue=charger_q)
+    
+    # AGV activation helper
+    def on_enter_queue(arg):
+        if isinstance(arg, sim.Queue):
+            if arg == server_q and server.ispassive():
+                server.activate()
+            elif arg == charger_q and charger.ispassive():
+                charger.activate()
 
-    # Pass the RoutingGraph instance to the AGV and ControlSystem
-    agv1 = AGV(agv_id=1, routing_graph=routing_graph, server_queue=server_q, charger_queue=charger_q, available_agvs=available_agvs_q)
+    # Note: In a real scenario, use monkeypatch or use a custom Queue that activates the server.
+    # For this test, manually ensure they wake up.
+    
+    agv = AGV(
+        agv_id=1, 
+        routing_graph=routing_graph, 
+        server_queue=server_q, 
+        charger_queue=charger_q, 
+        available_agvs=available_agvs_q
+    )
 
-    dispatcher = MockControlSystem(available_agvs=available_agvs_q, routing_graph=routing_graph)
+    dispatcher = MockControlSystem(
+        available_agvs=available_agvs_q, 
+        routing_graph=routing_graph
+    )
 
-    env.speed(40)
-    env.run(1000)
+    # Manual activation injection (simplified)
+    original_enter = agv.enter
+    def patched_enter(queue):
+        original_enter(queue)
+        if queue == server_q and server.ispassive(): server.activate()
+        if queue == charger_q and charger.ispassive(): charger.activate()
+        if queue == available_agvs_q and dispatcher.ispassive(): dispatcher.activate()
+    agv.enter = patched_enter
+
+    # 4. UI Overlay
+    sim.AnimateText(text=lambda t: f"Time: {env.now():.1f} min", x=50, y=750, textcolor="white", fontsize=20)
+    sim.AnimateText(text=lambda t: f"AGV Battery: {agv.battery:.1f}Wh ({agv.soc:.1f}%)", 
+                    x=50, y=720, textcolor=lambda t: "red" if agv.battery < BATTERY_THRESHOLD else "green")
+
+    print("\n--- Starting AGV Charging Test ---")
+    env.speed(16)
+    env.run(500)
+    print("\n--- Test Finished ---")
 
 if __name__ == "__main__":
     run_simulation()

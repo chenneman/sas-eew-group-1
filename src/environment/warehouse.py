@@ -1,0 +1,273 @@
+"""Static warehouse layout generator."""
+
+from __future__ import annotations
+
+import salabim as sim
+
+from src.config import L_WH, W_WH, N_SERVERS, N_CHARGERS, N_ITEMS
+from src.environment.graph import Node, NodeType, RoutingGraph
+from src.utils.animation import ANIMATION_SCALE
+
+
+class Warehouse:
+    """
+    Constructs and manages the physical layout of the picker-to-parts warehouse.
+    
+    The warehouse is modeled as a grid of nodes connected by edges, with specialized
+    locations for shelves, packing stations, charging docks, and AGV idle spots.
+    This class is a pure environment generator and does not manage inventory.
+    """
+
+    def __init__(
+            self,
+            length: int = L_WH,
+            width: int = W_WH,
+            aisle_width: int = 2,
+            n_shelf_nodes: int = N_ITEMS,
+            n_packing: int = N_SERVERS,
+            n_chargers: int = N_CHARGERS,
+    ) -> None:
+        """
+        Initializes the warehouse dimensions and triggers the geometric generation.
+        
+        Args:
+            length: Total length in the X direction (meters).
+            width: Total width in the Y direction (meters).
+            aisle_width: Space between shelving bays (meters).
+            n_shelf_nodes: Total number of shelving units to generate.
+            n_packing: Number of packing stations.
+            n_chargers: Number of charging docks.
+        """
+        # 1. Generate geometry sets
+        (
+            shelf_x_set, shelf_y_set,
+            packing_coord_set, charging_coord_set, idle_coord_set
+        ) = self._generate_geometry(
+            length, width, aisle_width,
+            n_shelf_nodes, n_packing, n_chargers
+        )
+
+        # 2. Build RoutingGraph
+        self.routing_graph = RoutingGraph()
+        self.all_nodes, self.location_to_node_id = self._build_graph(
+            length, width,
+            shelf_x_set, shelf_y_set,
+            packing_coord_set, charging_coord_set, idle_coord_set
+        )
+
+        # 3. Lookup attributes
+        self.shelf_nodes = [n for n in self.all_nodes if n.type == NodeType.SHELF]
+        self.packing_nodes = [n for n in self.all_nodes if n.type == NodeType.PACKING]
+        self.charging_nodes = [n for n in self.all_nodes if n.type == NodeType.CHARGING]
+        self.idle_nodes = [n for n in self.all_nodes if n.type == NodeType.IDLE]
+        self.pick_nodes = [n for n in self.all_nodes if n.type == NodeType.PICK]
+
+        # Extracted lists of IDs for quick access in components
+        self.shelf_node_ids = [n.id for n in self.shelf_nodes]
+        self.idle_spot_node_ids = [n.id for n in self.idle_nodes]
+        self.packing_station_node_ids = [n.id for n in self.packing_nodes]
+        self.charging_station_node_ids = [n.id for n in self.charging_nodes]
+        self.pick_node_ids = [n.id for n in self.pick_nodes]
+
+        # Stateful Salabim Queues (populated later by build_queues)
+        self.packing_queues: list[dict] = []
+        self.charger_queues: list[dict] = []
+
+        # Only animate if an environment is active
+        if sim.default_env():
+            self._animate_layout()
+
+    def _animate_layout(self) -> None:
+        """Draws the static grid and functional zones using sim.AnimateRectangle."""
+        for node in self.all_nodes:
+            x_raw, y_raw = node.coords
+            
+            x0 = x_raw * ANIMATION_SCALE
+            y0 = y_raw * ANIMATION_SCALE
+            x1 = x0 + ANIMATION_SCALE
+            y1 = y0 + ANIMATION_SCALE
+            
+            if node.type == NodeType.SHELF:
+                color = "saddlebrown"
+            elif node.type == NodeType.PACKING:
+                color = "royalblue"
+            elif node.type == NodeType.CHARGING:
+                color = "gold"
+            elif node.type == NodeType.IDLE:
+                color = "dimgray"
+            elif node.type == NodeType.PICK:
+                color = "lightgray"
+            else:
+                color = "#2b2b2b"
+                
+            sim.AnimateRectangle(
+                spec=(x0, y0, x1, y1),
+                fillcolor=color,
+                linecolor=color,
+                linewidth=0
+            )
+
+        # Add labels
+        for i, node in enumerate(self.packing_nodes):
+            x_raw, y_raw = node.coords
+            x0 = x_raw * ANIMATION_SCALE
+            y1 = y_raw * ANIMATION_SCALE + ANIMATION_SCALE
+            sim.AnimateText(
+                text=f"Pack {i+1}",
+                x=x0 + ANIMATION_SCALE / 2,
+                y=y1 + 10,
+                textcolor="white",
+                fontsize=12,
+                text_anchor="c"
+            )
+
+        for i, node in enumerate(self.charging_nodes):
+            x_raw, y_raw = node.coords
+            x0 = x_raw * ANIMATION_SCALE
+            y0 = y_raw * ANIMATION_SCALE
+            sim.AnimateText(
+                text=f"Charge {i+1}",
+                x=x0 + ANIMATION_SCALE / 2,
+                y=y0 - 10,
+                textcolor="white",
+                fontsize=12,
+                text_anchor="c"
+            )
+
+    def _generate_geometry(
+            self,
+            length: int, width: int, aisle_width: int,
+            n_shelf_nodes: int, n_packing: int, n_chargers: int
+    ) -> tuple[set[tuple[int, int]], set[tuple[int, int]], set[tuple[int, int]], set[tuple[int, int]], set[tuple[int, int]]]:
+        """Calculates coordinate sets for the different functional zones of the warehouse."""
+        n_bays = 5
+        shelf_w = 2
+        
+        shelf_rows = 10
+        shelf_y_min = (width - shelf_rows) // 2
+        shelf_y_max = shelf_y_min + shelf_rows - 1
+
+        shelf_coord_set: set[tuple[int, int]] = set()
+        pick_coord_set: set[tuple[int, int]] = set()
+        
+        start_x = 3 + aisle_width
+        
+        for bay in range(n_bays):
+            bay_x_left = start_x + bay * (shelf_w + aisle_width)
+            bay_x_right = bay_x_left + 1
+            
+            for y in range(shelf_y_min, shelf_y_max + 1):
+                shelf_coord_set.add((bay_x_left, y))
+                shelf_coord_set.add((bay_x_right, y))
+                pick_coord_set.add((bay_x_left - 1, y))
+                pick_coord_set.add((bay_x_right + 1, y))
+
+        packing_y = shelf_y_min - 3
+        packing_xs = [int(round(length * (i + 1) / (n_packing + 1))) for i in range(n_packing)]
+        packing_coord_set = {(x, packing_y) for x in packing_xs}
+
+        charging_y = shelf_y_max + 4
+        margin = 3
+        # Use simple list comprehension instead of numpy for linear spacing to keep it lightweight
+        charge_xs = [int(round(margin + i * (length // 2 - 2 * margin) / max(1, n_chargers - 1))) for i in range(n_chargers)]
+        charging_coord_set = {(x, charging_y) for x in charge_xs}
+
+        idle_xs = [int(round(length // 2 + margin + i * (length // 2 - 2 * margin - 1) / max(1, n_chargers - 1))) for i in range(n_chargers)]
+        idle_coord_set = {(x, charging_y) for x in idle_xs}
+
+        return shelf_coord_set, pick_coord_set, packing_coord_set, charging_coord_set, idle_coord_set
+
+    def _build_graph(
+            self, length: int, width: int,
+            shelf_coord_set: set[tuple[int, int]], pick_coord_set: set[tuple[int, int]],
+            packing_coord_set: set[tuple[int, int]],
+            charging_coord_set: set[tuple[int, int]],
+            idle_coord_set: set[tuple[int, int]]
+    ) -> tuple[list[Node], dict[tuple[int, int], int]]:
+        """Instantiates all nodes, assigns their NodeType, and builds the network edges."""
+        all_nodes: list[Node] = []
+        coord_to_id: dict[tuple[int, int], int] = {}
+
+        nid = 0
+        for y in range(width):
+            for x in range(length):
+                coords = (x, y)
+                ntype = self._classify(
+                    coords, length, width,
+                    shelf_coord_set, pick_coord_set,
+                    packing_coord_set, charging_coord_set, idle_coord_set,
+                )
+                node = Node(nid, coords, ntype)
+                self.routing_graph.add_node(node)
+                all_nodes.append(node)
+                coord_to_id[coords] = nid
+                nid += 1
+
+        for y in range(width):
+            for x in range(length):
+                node_a = all_nodes[coord_to_id[(x, y)]]
+                if node_a.type == NodeType.SHELF:
+                    continue
+                    
+                if x + 1 < length:
+                    node_b_right = all_nodes[coord_to_id[(x + 1, y)]]
+                    if node_b_right.type != NodeType.SHELF:
+                        self.routing_graph.add_edge(coord_to_id[(x, y)], coord_to_id[(x + 1, y)])
+                
+                if y + 1 < width:
+                    node_b_up = all_nodes[coord_to_id[(x, y + 1)]]
+                    if node_b_up.type != NodeType.SHELF:
+                        self.routing_graph.add_edge(coord_to_id[(x, y)], coord_to_id[(x, y + 1)])
+
+        return all_nodes, coord_to_id
+
+    @staticmethod
+    def _classify(
+            coords: tuple[int, int],
+            length: int,
+            width: int,
+            shelf_coord_set: set[tuple[int, int]],
+            pick_coord_set: set[tuple[int, int]],
+            packing_set: set[tuple[int, int]],
+            charging_set: set[tuple[int, int]],
+            idle_set: set[tuple[int, int]],
+    ) -> NodeType:
+        """Maps a coordinate to a specific functional NodeType."""
+        if coords in packing_set:
+            return NodeType.PACKING
+        if coords in charging_set:
+            return NodeType.CHARGING
+        if coords in idle_set:
+            return NodeType.IDLE
+        if coords in shelf_coord_set:
+            return NodeType.SHELF
+        if coords in pick_coord_set:
+            return NodeType.PICK
+        x, y = coords
+        if x == 0 or x == length - 1 or y == 0 or y == width - 1:
+            return NodeType.BORDER
+        return NodeType.AISLE
+
+    def build_queues(self, env: sim.Environment) -> Warehouse:
+        """
+        Initializes salabim Queues for packing and charging stations.
+        
+        Args:
+            env: The active Salabim environment.
+            
+        Returns:
+            The warehouse instance for method chaining.
+        """
+        self.packing_queues = [
+            {"id": i + 1, "node_id": n.id,
+             "queue": sim.Queue(name=f"packing_{i + 1}_queue", env=env)}
+            for i, n in enumerate(self.packing_nodes)
+        ]
+
+        self.charger_queues = [
+            {"id": i + 1, "node_id": n.id,
+             "queue": sim.Queue(name=f"charger_{i + 1}_queue", env=env)}
+            for i, n in enumerate(self.charging_nodes)
+        ]
+
+        return self

@@ -1,10 +1,10 @@
 import salabim as sim
 
-from src.models.graph import RoutingGraph, Node, NodeType
-from src.models.item import Item
-from src.models.order_generator import TOrder
-from src.models.controlsystem import TControlSystem
-from src.models.agv import AGVStatus
+from src.environment.graph import RoutingGraph, Node, NodeType
+from src.entities.item import Item
+from src.entities.order import Order
+from src.components.control_system import ControlSystem
+from src.components.agv import AGVStatus
 
 
 class MockWarehouse:
@@ -27,6 +27,7 @@ class MockWarehouse:
 
         self.idle_spot_node_ids = [1]
         self.packing_station_node_ids = [4]
+        self.shelf_node_ids = [2, 3]
 
         self.location_to_node_id = {
             (1, 0): 2,
@@ -35,13 +36,14 @@ class MockWarehouse:
 
 
 class MockAGV:
-    def __init__(self, agv_id):
+    def __init__(self, agv_id, current_node=1):
         self.agv_id = agv_id
         self.status = AGVStatus.IDLE
-        self.soc = 621.6
+        self.battery = 621.6 
         self.current_task = None
         self.route = None
         self.orders = []
+        self.current_node = current_node
 
 
 def run_test():
@@ -59,7 +61,7 @@ def run_test():
         height=1,
         volume=1000,
         url="",
-        shelf_location=(1, 0),
+        node_id=2,
     )
 
     item2 = Item(
@@ -71,11 +73,11 @@ def run_test():
         height=1,
         volume=1000,
         url="",
-        shelf_location=(2, 0),
+        node_id=3,
     )
 
-    order1 = TOrder(arrival_sim_min=0, item=item1)
-    order2 = TOrder(arrival_sim_min=0, item=item2)
+    order1 = Order(order_id=1, arrival_min=0, item=item1)
+    order2 = Order(order_id=2, arrival_min=0, item=item2)
     order_queue.append(order1)
     order_queue.append(order2)
 
@@ -84,7 +86,7 @@ def run_test():
         MockAGV(2),
     ]
 
-    control_system = TControlSystem(
+    control_system = ControlSystem(
         warehouse=warehouse,
         order_queue=order_queue,
         available_agvs=agvs,
@@ -114,4 +116,3 @@ def run_test():
 
 if __name__ == "__main__":
     run_test()
-

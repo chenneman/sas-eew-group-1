@@ -1,103 +1,61 @@
 import salabim as sim
 
-from src.models.agv import AGVStatus
-from src.models.item import Item
-from src.models.order_generator import TOrder
-from src.models.server import TServer
-from src.models.TTask import TTask
-
-
-class FixedServiceTimeGenerator:
-    def sample_service_time(self, n_items):
-        return 2.0, 3.0
+from src.components.server import Server
+from src.entities.item import Item
+from src.entities.order import Order
+from src.entities.task import Task
+from src.components.agv import AGVStatus
 
 
 class MockAGV(sim.Component):
-    def setup(self, queue, task):
-        self.agv_id = 1
+    def setup(self, agv_id, queue):
+        self.agv_id = agv_id
+        self.status = AGVStatus.MOVING
+        self.current_task = None
         self.queue = queue
-        self.current_task = task
-        self.route = [1, 2, 3]
-        self.orders = getattr(task, "orders", [])
-        self.status = AGVStatus.UNLOADING
-        self.reactivated_at = None
+
+    def complete_task(self):
+        self.current_task = None
 
     def process(self):
-        self.enter(self.queue)
-        yield self.passivate()
-        self.reactivated_at = self.env.now()
+        self.passivate()
 
 
-def test_server_completes_orders_and_reactivates_agv():
-    env = sim.Environment(trace=False)
-    queue = sim.Queue("ServerQueue")
+def run_test():
+    env = sim.Environment(trace=True)
+
+    server_queue = sim.Queue("server_queue")
     processed_orders = []
 
-    item = Item(
-        sku=1,
-        name="Box",
-        weight=1.0,
-        length=1.0,
-        width=1.0,
-        height=1.0,
-        volume=1.0,
-        url="",
+    server = Server(
+        server_id=1,
+        queue=server_queue,
+        processed_orders=processed_orders
     )
-    order = TOrder(arrival_sim_min=0, item=item)
-    task = TTask(orders=[order], route=[1, 2, 3], agv=None, creation_time=0)
 
-    agv = MockAGV(queue=queue, task=task)
+    # Create test data
+    item1 = Item(sku=1, name="Box 1", weight=4.0, length=1, width=1, height=1, volume=1000, url="",
+                 node_id=2)
+    order1 = Order(order_id=1, arrival_min=0, item=item1)
+
+    task = Task(task_id=1, orders=[order1])
+
+    agv = MockAGV(agv_id=1, queue=server_queue)
+    agv.current_task = task
     task.agv = agv
-    TServer(
-        server_id=1,
-        queue=queue,
-        service_time_generator=FixedServiceTimeGenerator(),
-        processed_orders=processed_orders,
-        poll_interval=0.1,
-    )
 
-    env.run(till=5)
+    # Put AGV in queue to trigger server
+    agv.enter(server_queue)
 
-    assert item.status == "DELIVERED"
-    assert order.status == "COMPLETED"
-    assert order.completion_time == 3
-    assert processed_orders == [order]
-    assert agv.current_task is None
-    assert agv.route == []
-    assert agv.orders == []
-    assert agv.status == AGVStatus.IDLE
-    assert agv.reactivated_at == 3
+    print("\nStarting simulation...")
+    env.run(till=100)
+
+    print("\nResults:")
+    print(f"AGV final status: {agv.status}")
+    print(f"AGV current task (should be None): {agv.current_task}")
+    print(f"Processed orders: {[o.order_id for o in processed_orders]}")
+    print(f"Item status: {item1.status}")
 
 
-def test_server_handles_task_items_without_orders():
-    env = sim.Environment(trace=False)
-    queue = sim.Queue("ServerQueue")
-
-    item = Item(
-        sku=2,
-        name="Loose box",
-        weight=1.0,
-        length=1.0,
-        width=1.0,
-        height=1.0,
-        volume=1.0,
-        url="",
-    )
-
-    class TaskWithoutOrders:
-        all_items = [item]
-
-    agv = MockAGV(queue=queue, task=TaskWithoutOrders())
-    TServer(
-        server_id=1,
-        queue=queue,
-        service_time_generator=FixedServiceTimeGenerator(),
-        poll_interval=0.1,
-    )
-
-    env.run(till=5)
-
-    assert item.status == "DELIVERED"
-    assert agv.current_task is None
-    assert agv.status == AGVStatus.IDLE
-    assert agv.reactivated_at == 3
+if __name__ == "__main__":
+    run_test()

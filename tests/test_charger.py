@@ -1,102 +1,75 @@
 import salabim as sim
+from src.components.charger import Charger
+from src.components.agv import AGVStatus
 
-from src.models.agv import AGVStatus
-from src.models.charger import TCharger
+from src.config import MAX_BATTERY
 
 
 class MockAGV(sim.Component):
-    def setup(self, queue, agv_id, soc, max_battery=100.0, current_node=2, routing_graph=None):
-        self.queue = queue
+    def setup(self, agv_id, queue, current_battery):
         self.agv_id = agv_id
-        self.soc = soc
-        self.max_battery = max_battery
-        self.current_node = current_node
-        self.next_node = current_node
-        self.routing_graph = routing_graph
-        self.graph = routing_graph._graph if routing_graph is not None else None
-        self.route = []
-        self.status = AGVStatus.CHARGING
-        self.reactivated_at = None
+        self.status = AGVStatus.MOVING
+        self.battery = current_battery
+        self.queue = queue
+        self.charge_completion_time = None
+
+    @property
+    def soc(self) -> float:
+        return self.battery / MAX_BATTERY * 100
 
     def process(self):
-        self.enter(self.queue)
-        yield self.passivate()
-        self.reactivated_at = self.env.now()
+        self.passivate()
+        # When activated by the charger, record the time
+        self.charge_completion_time = self.env.now()
 
 
-def make_graph():
-    class FakeNodeView:
-        def __init__(self, node_data):
-            self.node_data = node_data
-
-        def __call__(self, data=False):
-            if data:
-                return list(self.node_data.items())
-            return list(self.node_data)
-
-    class FakeNetworkGraph:
-        def __init__(self):
-            self.nodes = FakeNodeView({
-                1: {"type": "IDLE"},
-                2: {"type": "CHARGING"},
-                3: {"type": "CHARGING"},
-            })
-
-    class FakeRoutingGraph:
-        def __init__(self):
-            self._graph = FakeNetworkGraph()
-
-        def get_shortest_path(self, start_id, end_id):
-            return [start_id, end_id]
-
-    return FakeRoutingGraph()
-
-
-def test_charger_selects_highest_battery_percentage_first():
+def run_test():
     env = sim.Environment(trace=False)
-    queue = sim.Queue("ChargerQueue")
-    graph = make_graph()
 
-    low = MockAGV(queue=queue, agv_id=1, soc=20, current_node=2, routing_graph=graph)
-    high = MockAGV(queue=queue, agv_id=2, soc=80, current_node=3, routing_graph=graph)
-    TCharger(
+    charger_queue = sim.Queue("charger_queue")
+
+    # Use a clean 10.0 Wh/min for predictable math in the test
+    test_charging_rate = 10.0
+
+    charger = Charger(
         charger_id=1,
-        queue=queue,
-        routing_graph=graph,
-        idle_node_id=1,
-        charging_rate=10,
-        poll_interval=0.1,
+        queue=charger_queue,
+        charging_rate=test_charging_rate
     )
 
-    env.run(till=3)
+    # AGV 1: 50% battery (missing 310.8 Wh)
+    agv1 = MockAGV(agv_id=1, queue=charger_queue, current_battery=310.8)
+    # AGV 2: 10% battery (missing 559.44 Wh)
+    agv2 = MockAGV(agv_id=2, queue=charger_queue, current_battery=62.16)
 
-    assert high.soc == high.max_battery
-    assert high.current_node == 1
-    assert high.next_node == 1
-    assert high.status == AGVStatus.IDLE
-    assert high.reactivated_at == 2
-    assert low.reactivated_at is None
+    agv1.enter(charger_queue)
+    agv2.enter(charger_queue)
+
+    env.run(till=200)
+
+    # Mathematical expectations
+    agv1_charge_time = (MAX_BATTERY - 310.8) / test_charging_rate  # 31.08
+    agv2_charge_time = (MAX_BATTERY - 62.16) / test_charging_rate  # 55.944
+
+    # Because AGV 1 has higher SOC (50% > 10%), it should be charged FIRST
+    # AGV 2 should finish charging after AGV 1 is done
+
+    expected_agv1_time = agv1_charge_time
+    expected_agv2_time = agv1_charge_time + agv2_charge_time
+
+    # Assertions
+    assert abs(agv1.battery - MAX_BATTERY) < 0.001, f"AGV1 battery not full: {agv1.battery}"
+    assert agv1.status == AGVStatus.IDLE, f"AGV1 wrong status: {agv1.status}"
+    assert abs(
+        agv1.charge_completion_time - expected_agv1_time) < 0.001, f"AGV1 wrong completion time: {agv1.charge_completion_time} != {expected_agv1_time}"
+
+    assert abs(agv2.battery - MAX_BATTERY) < 0.001, f"AGV2 battery not full: {agv2.battery}"
+    assert agv2.status == AGVStatus.IDLE, f"AGV2 wrong status: {agv2.status}"
+    assert abs(
+        agv2.charge_completion_time - expected_agv2_time) < 0.001, f"AGV2 wrong completion time: {agv2.charge_completion_time} != {expected_agv2_time}"
+
+    print("Charger tests passed! AGVs were processed in correct SOC order and charged fully.")
 
 
-def test_charger_moves_full_agv_to_idle_spot():
-    env = sim.Environment(trace=False)
-    queue = sim.Queue("ChargerQueue")
-    graph = make_graph()
-
-    agv = MockAGV(queue=queue, agv_id=1, soc=100, current_node=2, routing_graph=graph)
-    TCharger(
-        charger_id=1,
-        queue=queue,
-        routing_graph=graph,
-        idle_node_id=1,
-        charging_rate=10,
-        poll_interval=0.1,
-    )
-
-    env.run(till=1)
-
-    assert agv.soc == agv.max_battery
-    assert agv.current_node == 1
-    assert agv.route == [2, 1]
-    assert agv.status == AGVStatus.IDLE
-    assert agv.reactivated_at == 0
+if __name__ == "__main__":
+    run_test()

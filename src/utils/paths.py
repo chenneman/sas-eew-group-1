@@ -21,9 +21,12 @@ def ensure_directories():
     for directory in [DATA_DIR, LOGS_DIR]:
         directory.mkdir(parents=True, exist_ok=True)
 
+import logging
+logger = logging.getLogger(__name__)
+
 if __name__ == "__main__":
     # Quick debug output to verify paths
-    print(f"Project Root: {PROJECT_ROOT}")
-    print(f"Data Dir:     {DATA_DIR}")
-    print(f"Selected CSV: {SELECTED_ITEMS_CSV}")
-    print(f"Exists:       {SELECTED_ITEMS_CSV.exists()}")
+    logger.info(f"Project Root: {PROJECT_ROOT}")
+    logger.info(f"Data Dir:     {DATA_DIR}")
+    logger.info(f"Selected CSV: {SELECTED_ITEMS_CSV}")
+    logger.info(f"Exists:       {SELECTED_ITEMS_CSV.exists()}")
