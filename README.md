@@ -16,9 +16,8 @@ cd sas-eew-group-1
 
 ### 3. Get a Gurobi license
 This project uses Gurobi to solve the routing optimization. It is recommended to get an academic license to avoid free-tier limits.
-- Go to [Gurobi](https://portal.gurobi.com/iam/licenses/request/) and generate a license.
-- **Option A (.lic file):** Save the `gurobi.lic` file in the project root and create a `.env` file containing: `GRB_LICENSE_FILE=gurobi.lic`.
-- **Option B (WLS):** If using a Web License Service, add your `WLSACCESSID`, `WLSSECRET`, and `LICENSEID` directly to the `.env` file.
+- Go to [Gurobi](https://portal.gurobi.com/iam/licenses/request/) and generate a WLS license. 
+- Save the `gurobi.lic` file in the project root and create a `.env` file containing: `GRB_LICENSE_FILE=gurobi.lic`.
 
 ### 4. Set Up & Run
 Once the project is open:
