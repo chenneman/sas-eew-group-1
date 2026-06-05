@@ -399,6 +399,13 @@ class SimulationEngine:
         valid_orders = [o for o in self.order_generator.orders if o.arrival_min >= WARMUP_MIN]
         self.metrics.total_orders_generated = len(valid_orders)
 
+        # 1b. Orders generated per hour
+        generated_per_hour = {}
+        for o in valid_orders:
+            hr = int((o.arrival_min - WARMUP_MIN) // 60)
+            generated_per_hour[hr] = generated_per_hour.get(hr, 0) + 1
+        self.metrics.generated_orders_per_hour = generated_per_hour
+
         # 2. Aggregate Server data (Orders completed and fulfillment times)
         all_valid_completed = []
         for server in self.servers:
@@ -434,7 +441,17 @@ class SimulationEngine:
                 self.metrics.peak_throughput_hr = max(hourly_counts.values())
         
         # Min SoC
-        self.metrics.min_fleet_soc = min(agv.soc_monitor.minimum() for agv in self.agvs if agv.soc_monitor.number_of_entries() > 0)
+        #self.metrics.min_fleet_soc = min(agv.soc_monitor.minimum() for agv in self.agvs if agv.soc_monitor.number_of_entries() > 0)
+        soc_values = [
+            agv.soc_monitor.minimum()
+            for agv in self.agvs
+            if agv.soc_monitor.number_of_entries() > 0
+        ]
+
+        if soc_values:
+            self.metrics.min_fleet_soc = min(soc_values)
+        else:
+            self.metrics.min_fleet_soc = min(agv.soc for agv in self.agvs)
 
         # 6. KPI: Diagnostic Metrics
         assigned_orders = [o for o in valid_orders if o.assignment_min is not None]
@@ -469,6 +486,7 @@ class SimulationEngine:
                 "idle_pct": idle_pct,
                 "charging_pct": charging_pct
             }
+            
 
     def run(self, till: float):
         """Executes the simulation for the specified duration."""

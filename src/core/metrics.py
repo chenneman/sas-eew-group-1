@@ -23,6 +23,7 @@ class SimulationMetrics:
     energy_consumed_wh: float = 0.0
     order_fulfillment_times: list[float] = field(default_factory=list)
     agv_metrics: dict[int, dict] = field(default_factory=dict)
+    generated_orders_per_hour: dict[int, int] = field(default_factory=dict)
     
     # New KPIs
     total_mass_delivered: float = 0.0
@@ -51,6 +52,11 @@ class SimulationMetrics:
         lines.append(f"Orders Still Pending:     {self.pending_orders}")
         lines.append(f"Orders In Progress:       {self.in_progress_orders}")
         lines.append("")
+        lines.append("--- Orders Generated Per Hour ---")
+        for hr, count in sorted(self.generated_orders_per_hour.items()):
+            lines.append(f"Hour {hr:02d}: {count}")
+        lines.append("")
+
 
         lines.append("--- Optimization Targets (Goal KPIs) ---")
         lines.append(f"Total Energy Consumed:    {self.energy_consumed_wh:.2f} Wh")

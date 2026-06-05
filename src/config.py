@@ -23,13 +23,13 @@ PICK_TIME_PER_ITEM = 60  # Seconds per item picked
 INITIAL_BATTERY_FACTOR = 0.15  # Fraction of MAX_BATTERY to start with (e.g. 0.05 for testing)
 
 # Control / global
-INNOVATION_ENABLED = True  # True = Multi-stop picking, False = 1 order per AGV
+INNOVATION_ENABLED = False  # True = Multi-stop picking, False = 1 order per AGV
 MAX_WAIT_TIME = 5  # maximum time (in sim minutes) to wait for a full batch before triggering.
 BATCH_SIZE = 4  # the number of orders to pool before triggering a routing run.
 RANDOM_SEED = 1234  # Seed for reproducible simulation runs
 
 # Scaling
-ORDER_RATE_MULTIPLIER = 5.0  # Multiplies orders/hr rate (e.g., 2.0 doubles demand)
+ORDER_RATE_MULTIPLIER = 1.0  # Multiplies orders/hr rate (e.g., 2.0 doubles demand)
 SERVICE_TIME_MULTIPLIER = 2.0  # Multiplies unloading/packing time (e.g., 2.0 makes it 2x slower)
 
 # Time
@@ -39,7 +39,7 @@ HORIZON_MIN = 24 * 60 # Simulation time horizon in minutes
 TOTAL_MIN = WARMUP_MIN + HORIZON_MIN
 
 # UI
-ANIMATE = True  # If False the simulation runs much faster
+ANIMATE = False  # If False the simulation runs much faster
 ENABLE_UI_LOGGING = True  # Set to False for high-speed runs to avoid list-appending overhead
 INITIAL_ANIM_SPEED = 1  # Initial animation speed (e.g., 1 for synced)
 

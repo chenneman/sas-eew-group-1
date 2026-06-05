@@ -9,12 +9,23 @@ logger = logging.getLogger(__name__)
 from src.config import SIM_START_HOUR, ORDER_RATE_MULTIPLIER
 from src.entities.order import Order
 
-ORDERS_PER_HOUR = [
-    13.0,  7.5,  5.0,  4.5,  4.0,  4.0,   # 00-05
-     5.0,  8.0, 16.0, 24.0, 30.0, 32.0,   # 06-11
-    29.5, 32.0, 32.0, 32.0, 32.5, 30.0,   # 12-17
-    28.0, 30.0, 30.5, 30.5, 28.0, 21.0,   # 18-23
-]
+#ORDERS_PER_HOUR = [
+#    13.0,  7.5,  5.0,  4.5,  4.0,  4.0,   # 00-05
+#     5.0,  8.0, 16.0, 24.0, 30.0, 32.0,   # 06-11
+#    29.5, 32.0, 32.0, 32.0, 32.5, 30.0,   # 12-17
+#    28.0, 30.0, 30.5, 30.5, 28.0, 21.0,   # 18-23
+#]
+
+# ORDERS_PER_HOUR = [
+#     25.286240, 14.145563, 9.022052, 7.804150,7.156685,6.862044,9.618115,
+#     15.602688, 30.774819, 47.333230, 59.971362, 63.864598, 58.204358, 62.753838,
+#     63.034389, 61.623276, 63.945139, 59.013776, 55.635515, 58.274353, 60.126703,
+#     60.157166, 55.995140, 40.854802
+# ]
+
+#For verification
+ORDERS_PER_HOUR = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,]
+
 
 # ── Helper functions ──────────────────────────────────────────────────────────
 
@@ -54,6 +65,9 @@ class OrderGenerator(sim.Component):
 
     def process(self):
         """Main generator loop. (Salabim yieldless paradigm)."""
+        if sum(ORDERS_PER_HOUR) == 0:        
+            return
+        
         while True:
             # 1. Sample inter-arrival time
             mean_iat = mean_iat_minutes(self.env.now())
