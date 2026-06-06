@@ -75,11 +75,17 @@ class Server(sim.Component):
                 continue
                 
             elif self.state == "UNLOADING":
+                
                 # AGV is done, release it
                 if hasattr(self.current_agv, "complete_task"):
                     self.current_agv.complete_task()
                 self.current_agv.status = AGVStatus.IDLE
                 self.current_agv.activate()
+
+                for order in self.current_task.orders:
+                    order.event_log.append(
+                        (self.env.now(), f"Delivered to Server {self.server_id}; AGV released")
+                    )
                 
                 # Move to packing phase
                 if self.remaining_op_time > 0:
@@ -99,6 +105,7 @@ class Server(sim.Component):
                     for order in self.current_task.orders:
                         order.status = "COMPLETED"
                         order.completion_time = self.env.now()
+                        order.event_log.append((self.env.now(), f"Completed at Server {self.server_id}")) #additional for verification
                         self.processed_orders.append(order)
                         
                 self.current_agv = None

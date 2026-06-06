@@ -121,6 +121,7 @@ class ControlSystem(sim.Component):
                 for order in task.orders:
                     order.status = "ASSIGNED"
                     order.assignment_min = self.env.now()
+                    order.event_log.append((self.env.now(), f"Assigned to AGV {agv.agv_id} as Task {task.task_id}")) #additional for verification
                     self.order_queue.remove(order)
                 agv.activate()
 

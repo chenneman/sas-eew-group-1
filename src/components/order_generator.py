@@ -16,15 +16,15 @@ from src.entities.order import Order
 #    28.0, 30.0, 30.5, 30.5, 28.0, 21.0,   # 18-23
 #]
 
-# ORDERS_PER_HOUR = [
-#     25.286240, 14.145563, 9.022052, 7.804150,7.156685,6.862044,9.618115,
-#     15.602688, 30.774819, 47.333230, 59.971362, 63.864598, 58.204358, 62.753838,
-#     63.034389, 61.623276, 63.945139, 59.013776, 55.635515, 58.274353, 60.126703,
-#     60.157166, 55.995140, 40.854802
-# ]
+ORDERS_PER_HOUR = [
+    25.286240, 14.145563, 9.022052, 7.804150,7.156685,6.862044,9.618115,
+    15.602688, 30.774819, 47.333230, 59.971362, 63.864598, 58.204358, 62.753838,
+    63.034389, 61.623276, 63.945139, 59.013776, 55.635515, 58.274353, 60.126703,
+    60.157166, 55.995140, 40.854802
+]
 
 #For verification
-ORDERS_PER_HOUR = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,]
+#ORDERS_PER_HOUR = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,]
 
 
 # ── Helper functions ──────────────────────────────────────────────────────────
@@ -85,6 +85,7 @@ class OrderGenerator(sim.Component):
                 item=item,
                 arrival_min=self.env.now()
             )
+            order.event_log.append((self.env.now(), "Order generated")) #additional for verification
             logger.info(f"[OrderGenerator] New Order #{order.order_id} generated: {item.name[:20]} ({item.weight}kg)")
             
             if self.live_order_log is not None:
@@ -99,3 +100,44 @@ class OrderGenerator(sim.Component):
             # Wake up the control system if it's waiting for orders
             if self.control_system and self.control_system.ispassive():
                 self.control_system.activate()
+    
+    # def process(self):
+    #     """Mini verification scenario: generate exactly five orders."""
+
+    #     arrival_times = [1.0, 1.5, 1.8, 6.0, 12.0]
+
+    #     for arrival_time in arrival_times:
+
+    #         # Wait until the next scheduled arrival
+    #         self.hold(arrival_time - self.env.now())
+
+    #         self.orders_generated += 1
+    #         item = self.items[self.orders_generated - 1]
+
+    #         order = Order(
+    #             order_id=self.orders_generated,
+    #             item=item,
+    #             arrival_min=self.env.now()
+    #         )
+
+    #         order.event_log.append(
+    #             (self.env.now(), "Order generated")
+    #         )
+
+    #         logger.info(
+    #             f"[Verification] New Order #{order.order_id} generated: "
+    #             f"{item.name[:20]} ({item.weight}kg)"
+    #         )
+
+    #         if self.live_order_log is not None:
+    #             self.live_order_log.append(order)
+
+    #         self.orders.append(order)
+
+    #         if self.order_queue is not None:
+    #             self.order_queue.append(order)
+
+    #         if self.control_system and self.control_system.ispassive():
+    #             self.control_system.activate()
+
+    #     return

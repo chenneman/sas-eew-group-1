@@ -1,6 +1,6 @@
 """Order data model."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from src.entities.item import Item
 from src.config import SIM_START_HOUR
@@ -19,6 +19,7 @@ class Order:
     status: str = "PENDING"
     assignment_min: float | None = None
     completion_min: float | None = None
+    event_log: list = field(default_factory=list) #additional for verification
 
     @property
     def timestamp(self) -> str:

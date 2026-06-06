@@ -12,20 +12,20 @@ N_ITEMS = 100  # Number of items
 MAX_BATTERY = 621.6  # Wh
 SOC_THRESHOLD = 10  # %
 BATTERY_THRESHOLD = 0.01 * SOC_THRESHOLD * MAX_BATTERY
-DRIVE_SPEED = 1  # originally 3.5 # m/s
-E_BASE = 0.1  # originally 0.0489 # Wh/m
+DRIVE_SPEED = 3.5 # originally 3.5 # m/s
+E_BASE = 0.0489  # originally 0.0489 # Wh/m
 E_IDLE = 0.05  # Wh/min (Base electronics/sensor drain)
 ALPHA = 0.0001  # Wh/(kg·m)
 MAX_VOLUME = 60 * 40 * 40  # cm^3
 MAX_PAYLOAD = 40.0  # kg
 CHARGE_RATE = 43.17  # Wh/min
 PICK_TIME_PER_ITEM = 60  # Seconds per item picked
-INITIAL_BATTERY_FACTOR = 0.15  # Fraction of MAX_BATTERY to start with (e.g. 0.05 for testing)
+INITIAL_BATTERY_FACTOR = 0.8  # Fraction of MAX_BATTERY to start with (e.g. 0.05 for testing)
 
 # Control / global
 INNOVATION_ENABLED = False  # True = Multi-stop picking, False = 1 order per AGV
 MAX_WAIT_TIME = 5  # maximum time (in sim minutes) to wait for a full batch before triggering.
-BATCH_SIZE = 4  # the number of orders to pool before triggering a routing run.
+BATCH_SIZE = 4  # the number of orders to pool before triggering a routing run. #NEED TO BE 1 WHEN INNOVATION IS OFF
 RANDOM_SEED = 1234  # Seed for reproducible simulation runs
 
 # Scaling

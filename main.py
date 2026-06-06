@@ -17,9 +17,10 @@ load_dotenv()
 import logging
 import salabim as sim
 from src.core.simulation import SimulationEngine
-from src.config import SAVE_SUMMARY_TO_FILE, TOTAL_MIN, LOG_LEVEL, SAVE_LOG_TO_FILE
+from src.config import SAVE_SUMMARY_TO_FILE, TOTAL_MIN, LOG_LEVEL, SAVE_LOG_TO_FILE, MAX_PAYLOAD
 from src.utils.paths import LOGS_DIR
 from src.utils.logger import setup_logger
+import pandas as pd
 
 # Initialize custom logger
 setup_logger(
@@ -42,6 +43,40 @@ if __name__ == "__main__":
             
             # Report KPIs
             engine.metrics.report(save_to_file=SAVE_SUMMARY_TO_FILE)
+            
+            #additional for verification
+            # print("\nORDER TRACE")
+            # print("=" * 40)
+
+            # for order in engine.order_generator.orders:
+            #     print(f"\nOrder {order.order_id}")
+            #     print("Time [min] | Event")
+            #     print("-" * 40)
+            #     for t, event in order.event_log:
+            #         print(f"{t:8.2f} | {event}")
+            
+            #additional for verification
+            # battery_logs = []
+            # for agv in engine.agvs:
+            #     battery_logs.extend(agv.battery_log)
+
+            # battery_df = pd.DataFrame(battery_logs)
+            # battery_df.to_csv(LOGS_DIR / "agv_battery_log.csv", index=False)
+
+            # logger.info(f"Battery log saved to {LOGS_DIR / 'agv_battery_log.csv'}")
+
+            # print("\n--- AGV Payload Verification ---")
+            # print(f"Configured max payload = {MAX_PAYLOAD:.2f} kg\n")
+
+            # for agv in engine.agvs:
+            #     violated = agv.max_payload_observed > MAX_PAYLOAD
+
+            #     print(
+            #         f"AGV {agv.agv_id}: "
+            #         f"Max payload = {agv.max_payload_observed:.2f} kg | "
+            #         f"Max items = {agv.max_items_observed} | "
+            #         f"Constraint violated = {violated}"
+            #     )
             
     except sim.SimulationStopped:
         logger.warning("--- Simulation manually stopped by user. Generating partial report... ---")

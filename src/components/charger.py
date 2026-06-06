@@ -58,7 +58,13 @@ class Charger(sim.Component):
                 # Charging complete. 
                 logger.info(f"[Charger {self.charger_id}] Finished charging AGV {self.current_agv.agv_id if self.current_agv else 'unknown'}")
                 # The AGV should be full. Ensure it's full.
+                # self.current_agv.battery = MAX_BATTERY
+                # self.current_agv.status = AGVStatus.IDLE
+
+                #additional for verification
                 self.current_agv.battery = MAX_BATTERY
+                if hasattr(self.current_agv, "log_battery"):
+                    self.current_agv.log_battery()
                 self.current_agv.status = AGVStatus.IDLE
                 
                 self.current_agv.activate()

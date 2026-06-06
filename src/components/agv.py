@@ -57,6 +57,9 @@ class AGV(sim.Component):
         self.total_distance = 0.0
         self.total_stops = 0
         self.soc_monitor = sim.Monitor(name=f"soc_agv_{agv_id}")
+        self.battery_log = [] #additional for verification
+        self.max_payload_observed = 0.0 #additional for verification
+        self.max_items_observed = 0 #additional for verification
 
         # State tracking
         self.status = AGVStatus.IDLE
@@ -109,6 +112,16 @@ class AGV(sim.Component):
     def soc(self) -> float:
         """Percentage of battery remaining."""
         return self.battery / MAX_BATTERY * 100
+    
+    #additional for verification
+    def log_battery(self):
+        self.battery_log.append({
+            "agv_id": self.agv_id,
+            "time": self.env.now(),
+            "soc": self.soc,
+            "battery": self.battery,
+            "status": self.status.value,
+            })
 
     def get_anim_text(self, t: float) -> str:
         """Dynamically generates the text to display above the AGV."""
@@ -156,6 +169,7 @@ class AGV(sim.Component):
         self.battery -= energy_used
         self.total_energy_consumed += energy_used
         self.soc_monitor.tally(self.soc)
+        self.log_battery() #additional for verification
 
     def process(self):
         """Main lifecycle loop of the AGV component."""
@@ -219,6 +233,10 @@ class AGV(sim.Component):
                 for item in pickup.items:
                     self.payload_mass += item.weight
                     self.items_loaded += 1
+                
+                #additional for verification
+                self.max_payload_observed = max(self.max_payload_observed, self.payload_mass)
+                self.max_items_observed = max(self.max_items_observed, self.items_loaded)
 
             self.status = AGVStatus.MOVING
             self.drive_route(self.current_task.dropoff_route)
@@ -303,5 +321,6 @@ class AGV(sim.Component):
             self.battery -= energy_used
             self.total_energy_consumed += energy_used
             self.soc_monitor.tally(self.soc)
+            self.log_battery() #additional for verification
 
         self.current_node = route_node_ids[-1]
