@@ -103,41 +103,29 @@ class OrderGenerator(sim.Component):
     
     # def process(self):
     #     """Mini verification scenario: generate exactly five orders."""
-
     #     arrival_times = [1.0, 1.5, 1.8, 6.0, 12.0]
-
     #     for arrival_time in arrival_times:
-
     #         # Wait until the next scheduled arrival
     #         self.hold(arrival_time - self.env.now())
-
     #         self.orders_generated += 1
     #         item = self.items[self.orders_generated - 1]
-
     #         order = Order(
     #             order_id=self.orders_generated,
     #             item=item,
     #             arrival_min=self.env.now()
     #         )
-
     #         order.event_log.append(
     #             (self.env.now(), "Order generated")
     #         )
-
     #         logger.info(
     #             f"[Verification] New Order #{order.order_id} generated: "
     #             f"{item.name[:20]} ({item.weight}kg)"
     #         )
-
     #         if self.live_order_log is not None:
     #             self.live_order_log.append(order)
-
     #         self.orders.append(order)
-
     #         if self.order_queue is not None:
     #             self.order_queue.append(order)
-
     #         if self.control_system and self.control_system.ispassive():
     #             self.control_system.activate()
-
     #     return

@@ -28,6 +28,7 @@ class Server(sim.Component):
         self.processed_orders = processed_orders if processed_orders is not None else []
         self.poll_interval = poll_interval
         self.location = location
+        self.service_time_stats = {}
         
         # State machine variables
         self.state = "IDLE"
@@ -47,7 +48,14 @@ class Server(sim.Component):
                 self.state = "UNLOADING"
                 self.current_agv = self.queue.pop()
                 self.current_task = self.current_agv.current_task
+
+                #verification
+                for order in self.current_task.orders:
+                    order.event_log.append(
+                        (self.env.now(), f"Arrived at Server {self.server_id}; unloading started")
+                    )
                 
+                #old model
                 logger.debug(f"[Server {self.server_id}] Starting unloading AGV {self.current_agv.agv_id}")
                 
                 if not self.current_task:
@@ -67,7 +75,14 @@ class Server(sim.Component):
                 agv_time_sec, op_time_sec = self.service_time_generator.sample_service_time(n_items)
                 agv_time = (agv_time_sec * SERVICE_TIME_MULTIPLIER) / 60.0
                 self.remaining_op_time = max(0.0, ((op_time_sec * SERVICE_TIME_MULTIPLIER) / 60.0) - agv_time)
-                
+
+                #additional for verification
+                total_service_time = (op_time_sec * SERVICE_TIME_MULTIPLIER) / 60.0
+                if n_items not in self.service_time_stats:
+                    self.service_time_stats[n_items] = []
+
+                self.service_time_stats[n_items].append(total_service_time)   
+
                 for item in all_items:
                     item.status = "DELIVERED"
                     
@@ -91,6 +106,15 @@ class Server(sim.Component):
                 if self.remaining_op_time > 0:
                     self.state = "PACKING"
                     self.hold(self.remaining_op_time, mode="PACKING")
+
+                    #verification
+                    for order in self.current_task.orders:
+                        order.event_log.append(
+                            (self.env.now(), f"Packing started at Server {self.server_id}")
+                        )
+
+                    #old model
+                    self.hold(self.remaining_op_time, mode="PACKING")
                     continue
                 else:
                     # No packing time left, jump straight to finish
@@ -99,6 +123,11 @@ class Server(sim.Component):
                     continue
                     
             elif self.state == "PACKING" or self.state == "FINISHING":
+                #verification
+                for order in self.current_task.orders:
+                    order.event_log.append(
+                        (self.env.now(), f"Finishing at Server {self.server_id}")
+                    )
                 # Job is completely done
                 if self.current_task:
                     logger.info(f"[Server {self.server_id}] Finished processing {len(self.current_task.orders)} orders from AGV {self.current_agv.agv_id if self.current_agv else 'unknown'}")

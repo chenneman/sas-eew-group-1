@@ -44,7 +44,7 @@ if __name__ == "__main__":
             # Report KPIs
             engine.metrics.report(save_to_file=SAVE_SUMMARY_TO_FILE)
             
-            #additional for verification
+            # additional for verification orders
             # print("\nORDER TRACE")
             # print("=" * 40)
 
@@ -55,7 +55,7 @@ if __name__ == "__main__":
             #     for t, event in order.event_log:
             #         print(f"{t:8.2f} | {event}")
             
-            #additional for verification
+            #additional for verification battery 
             # battery_logs = []
             # for agv in engine.agvs:
             #     battery_logs.extend(agv.battery_log)
@@ -65,18 +65,31 @@ if __name__ == "__main__":
 
             # logger.info(f"Battery log saved to {LOGS_DIR / 'agv_battery_log.csv'}")
 
-            # print("\n--- AGV Payload Verification ---")
-            # print(f"Configured max payload = {MAX_PAYLOAD:.2f} kg\n")
+            # additional for verification payload
+            print(f"Configured max payload = {MAX_PAYLOAD:.2f} kg\n")
 
-            # for agv in engine.agvs:
-            #     violated = agv.max_payload_observed > MAX_PAYLOAD
+            for agv in engine.agvs:
+                violated = agv.max_payload_observed > MAX_PAYLOAD
 
-            #     print(
-            #         f"AGV {agv.agv_id}: "
-            #         f"Max payload = {agv.max_payload_observed:.2f} kg | "
-            #         f"Max items = {agv.max_items_observed} | "
-            #         f"Constraint violated = {violated}"
-            #     )
+                print(
+                    f"AGV {agv.agv_id}: "
+                    f"Max payload = {agv.max_payload_observed:.2f} kg | "
+                    f"Max items = {agv.max_items_observed} | "
+                    f"Constraint violated = {violated}"
+                )
+
+            #additional for serivice time verification
+            # for server in engine.servers:
+            #     print(f"\nServer {server.server_id}")
+
+            #     for n_items, times in sorted(server.service_time_stats.items()):
+            #         avg_time = sum(times) / len(times)
+
+            #         print(
+            #             f"{n_items} item(s): "
+            #             f"avg = {avg_time:.2f} min "
+            #             f"(n={len(times)})"
+            #         )
             
     except sim.SimulationStopped:
         logger.warning("--- Simulation manually stopped by user. Generating partial report... ---")

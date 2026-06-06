@@ -25,12 +25,12 @@ INITIAL_BATTERY_FACTOR = 0.8  # Fraction of MAX_BATTERY to start with (e.g. 0.05
 # Control / global
 INNOVATION_ENABLED = False  # True = Multi-stop picking, False = 1 order per AGV
 MAX_WAIT_TIME = 5  # maximum time (in sim minutes) to wait for a full batch before triggering.
-BATCH_SIZE = 4  # the number of orders to pool before triggering a routing run. #NEED TO BE 1 WHEN INNOVATION IS OFF
+BATCH_SIZE = 1 #4  # the number of orders to pool before triggering a routing run. #NEED TO BE 1 WHEN INNOVATION IS OFF
 RANDOM_SEED = 1234  # Seed for reproducible simulation runs
 
 # Scaling
 ORDER_RATE_MULTIPLIER = 1.0  # Multiplies orders/hr rate (e.g., 2.0 doubles demand)
-SERVICE_TIME_MULTIPLIER = 2.0  # Multiplies unloading/packing time (e.g., 2.0 makes it 2x slower)
+SERVICE_TIME_MULTIPLIER = 1.0  # Multiplies unloading/packing time (e.g., 2.0 makes it 2x slower)
 
 # Time
 SIM_START_HOUR = 0  # Start time of the simulation (0-23)
