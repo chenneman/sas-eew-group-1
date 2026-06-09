@@ -73,11 +73,12 @@ class SimulationEngine:
     Supports the context manager pattern for robust log file handling.
     """
 
-    def __init__(self, animate: bool = None):
+    def __init__(self, animate: bool = None): #experiment include:random_seed: int = None
         self.animate = animate if animate is not None else ANIMATE
         self.metrics = SimulationMetrics()
         self._trace_file = None
         self.env = None
+        #self.random_seed = random_seed if random_seed is not None else RANDOM_SEED  #additional for loops
 
     def __enter__(self):
         """Initializes the simulation environment and logs."""
@@ -85,9 +86,9 @@ class SimulationEngine:
             if not LOGS_DIR.exists():
                 LOGS_DIR.mkdir(parents=True, exist_ok=True)
             self._trace_file = open(LOGS_DIR / "trace.log", "w")
-            self.env = sim.Environment(trace=self._trace_file, random_seed=RANDOM_SEED)
+            self.env = sim.Environment(trace=self._trace_file, random_seed=RANDOM_SEED) #experiment: change random_seed=self.random_seed from random_seed=RANDOM_SEED
         else:
-            self.env = sim.Environment(trace=False, random_seed=RANDOM_SEED)
+            self.env = sim.Environment(trace=False, random_seed=RANDOM_SEED) #experiment: change random_seed=self.random_seed from random_seed=RANDOM_SEED
 
         # 1. World & Queues must be built before UI
         self._build_world()

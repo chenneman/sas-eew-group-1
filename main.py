@@ -3,6 +3,7 @@ Entry point for the SAS Energy-Aware AGV Simulation.
 """
 import ctypes
 import os
+import src.config as config 
 
 # Fix blurry text (Tkinter DPI awareness) on Windows
 if os.name == "nt":
@@ -21,6 +22,7 @@ from src.config import SAVE_SUMMARY_TO_FILE, TOTAL_MIN, LOG_LEVEL, SAVE_LOG_TO_F
 from src.utils.paths import LOGS_DIR
 from src.utils.logger import setup_logger
 import pandas as pd
+import numpy as np
 
 # Initialize custom logger
 setup_logger(
@@ -30,8 +32,11 @@ setup_logger(
 )
 logger = logging.getLogger(__name__)
 
+#normal code for log and run 
 if __name__ == "__main__":
     logger.info("Initializing Simulation Engine...")
+    
+   
 
     engine = None
     try:
@@ -113,3 +118,54 @@ if __name__ == "__main__":
         logger.error("--- Simulation Crashed! ---")
         logger.exception(e)
         raise e
+
+#for experimetns new code
+# if __name__ == "__main__":
+#     logger.info("Initializing Simulation Engine...")
+
+#     results = []
+
+#     for seed in range(1000, 1010):
+#         logger.info(f"--- Starting simulation run with seed {seed} ---")
+
+#         engine = None
+#         try:
+#             with SimulationEngine(random_seed=seed) as engine:
+#                 engine.run(till=TOTAL_MIN)
+
+#                 m = engine.metrics
+#                 run_duration_hr = m.sim_duration_min / 60
+
+#                 results.append({
+#                     "seed": seed,
+#                     "orders_generated": m.total_orders_generated,
+#                     "orders_fulfilled": m.total_orders_completed,
+#                     "pending_orders": m.pending_orders,
+#                     "in_progress_orders": m.in_progress_orders,
+#                     "energy_wh": m.energy_consumed_wh,
+#                     "energy_per_order": m.energy_consumed_wh / m.total_orders_completed if m.total_orders_completed > 0 else 0,
+#                     "specific_energy_wh_per_kg": m.energy_consumed_wh / m.total_mass_delivered if m.total_mass_delivered > 0 else 0,
+#                     "avg_distance_per_order": m.total_distance_traveled / m.total_orders_completed if m.total_orders_completed > 0 else 0,
+#                     "avg_throughput": m.total_orders_completed / run_duration_hr if run_duration_hr > 0 else 0,
+#                     "peak_throughput": m.peak_throughput_hr,
+#                     "avg_cycle_time": np.mean(m.order_fulfillment_times) if m.order_fulfillment_times else 0,
+#                     "p95_cycle_time": np.percentile(m.order_fulfillment_times, 95) if m.order_fulfillment_times else 0,
+#                     "max_cycle_time": np.max(m.order_fulfillment_times) if m.order_fulfillment_times else 0,
+#                     "min_fleet_soc": m.min_fleet_soc,
+#                     "avg_batching_delay": np.mean(m.batching_delays) if m.batching_delays else 0,
+#                     "avg_packing_queue_time": m.avg_packing_queue_min,
+#                     "avg_edges_traversed": m.total_stops / m.total_tasks_completed if m.total_tasks_completed > 0 else 0,
+#                 })
+
+#         except Exception as e:
+#             logger.error(f"--- Simulation Crashed for seed {seed}! ---")
+#             logger.exception(e)
+#             raise e
+
+#     df = pd.DataFrame(results)
+
+#     output_file = LOGS_DIR / "E9.csv"
+#     df.to_csv(output_file, index=False)
+
+#     print(f"\nSaved 10-run experiment results to: {output_file}")
+#     print(df)
