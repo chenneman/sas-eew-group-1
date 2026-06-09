@@ -60,6 +60,7 @@ class AGV(sim.Component):
         self.battery_log = [] #additional for verification
         self.max_payload_observed = 0.0 #additional for verification
         self.max_items_observed = 0 #additional for verification
+        self.trip_log = [] #additional for verification
 
         # State tracking
         self.status = AGVStatus.IDLE
@@ -122,6 +123,20 @@ class AGV(sim.Component):
             "battery": self.battery,
             "status": self.status.value,
             })
+
+    #additional for verification  
+    def log_trip_state(self, event: str):
+        self.trip_log.append({
+            "time": self.env.now(),
+            "agv_id": self.agv_id,
+            "event": event,
+            "node": self.current_node,
+            "payload_kg": self.payload_mass,
+            "items_loaded": self.items_loaded,
+            "battery_wh": self.battery,
+            "soc": self.soc,
+            "status": self.status.value
+        })
 
     def get_anim_text(self, t: float) -> str:
         """Dynamically generates the text to display above the AGV."""
@@ -233,6 +248,7 @@ class AGV(sim.Component):
                 for item in pickup.items:
                     self.payload_mass += item.weight
                     self.items_loaded += 1
+                self.log_trip_state("Pickup completed")  #additional for verification
                 
                 #additional for verification
                 self.max_payload_observed = max(self.max_payload_observed, self.payload_mass)
@@ -240,6 +256,7 @@ class AGV(sim.Component):
 
             self.status = AGVStatus.MOVING
             self.drive_route(self.current_task.dropoff_route)
+            self.log_trip_state("Arrived at server")
 
             self.status = AGVStatus.UNLOADING
             
@@ -322,5 +339,6 @@ class AGV(sim.Component):
             self.total_energy_consumed += energy_used
             self.soc_monitor.tally(self.soc)
             self.log_battery() #additional for verification
+            self.log_trip_state("Edge traversed") #additional for verification
 
         self.current_node = route_node_ids[-1]

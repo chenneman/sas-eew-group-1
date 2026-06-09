@@ -105,13 +105,15 @@ class Server(sim.Component):
                 # Move to packing phase
                 if self.remaining_op_time > 0:
                     self.state = "PACKING"
-                    self.hold(self.remaining_op_time, mode="PACKING")
-
                     #verification
                     for order in self.current_task.orders:
                         order.event_log.append(
                             (self.env.now(), f"Packing started at Server {self.server_id}")
                         )
+                        
+                    self.hold(self.remaining_op_time, mode="PACKING")
+
+                    
 
                     #old model
                     self.hold(self.remaining_op_time, mode="PACKING")

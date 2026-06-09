@@ -44,7 +44,7 @@ if __name__ == "__main__":
             # Report KPIs
             engine.metrics.report(save_to_file=SAVE_SUMMARY_TO_FILE)
             
-            # additional for verification orders
+            # # additional for verification orders
             # print("\nORDER TRACE")
             # print("=" * 40)
 
@@ -66,17 +66,17 @@ if __name__ == "__main__":
             # logger.info(f"Battery log saved to {LOGS_DIR / 'agv_battery_log.csv'}")
 
             # additional for verification payload
-            print(f"Configured max payload = {MAX_PAYLOAD:.2f} kg\n")
+            # print(f"Configured max payload = {MAX_PAYLOAD:.2f} kg\n")
 
-            for agv in engine.agvs:
-                violated = agv.max_payload_observed > MAX_PAYLOAD
+            # for agv in engine.agvs:
+            #     violated = agv.max_payload_observed > MAX_PAYLOAD
 
-                print(
-                    f"AGV {agv.agv_id}: "
-                    f"Max payload = {agv.max_payload_observed:.2f} kg | "
-                    f"Max items = {agv.max_items_observed} | "
-                    f"Constraint violated = {violated}"
-                )
+            #     print(
+            #         f"AGV {agv.agv_id}: "
+            #         f"Max payload = {agv.max_payload_observed:.2f} kg | "
+            #         f"Max items = {agv.max_items_observed} | "
+            #         f"Constraint violated = {violated}"
+            #     )
 
             #additional for serivice time verification
             # for server in engine.servers:
@@ -90,6 +90,14 @@ if __name__ == "__main__":
             #             f"avg = {avg_time:.2f} min "
             #             f"(n={len(times)})"
             #         )
+            
+
+            # #additional for verification battery depletion
+            # trip_logs = []
+            # for agv in engine.agvs:
+            #     trip_logs.extend(agv.trip_log)
+            # trip_df = pd.DataFrame(trip_logs)
+            # trip_df.to_csv(LOGS_DIR / "agv_trip_log.csv", index=False)
             
     except sim.SimulationStopped:
         logger.warning("--- Simulation manually stopped by user. Generating partial report... ---")
