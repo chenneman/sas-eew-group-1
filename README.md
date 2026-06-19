@@ -33,7 +33,9 @@ Once the project is open:
 
 ### 5. Configuration & Results
 
-- **Config:** Modify simulation parameters in `src/config.py`.
+- **Config:** Modify simulation parameters in `src/config.py`. Two important parameters are:
+   - `ANIMATE = True | False` if set to `True`, a UI shows the physical movement of the AGVs and live statistics. If only numerical results are required, set to `False` for faster processing.
+   - `INNOVATION_ENABLED = True | False` if set to `True`, the system uses multi-stop picking, else it assigns one order per AGV.
 - **Logs:** Simulation results and event logs are saved in the `logs` directory. 
 
 ---
