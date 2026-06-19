@@ -55,5 +55,6 @@ This project uses a Domain-Driven Design approach to clearly separate the simula
 ## Development
 ### Branches
 - `main` - The main branch. This is never edited directly.
+- `Verifications,-validations-and-experiments` - A branch dedicated to the final testing of the model. 
 
 Create a new branch for every new feature or bugfix, and open a pull request to merge it into `main`.
